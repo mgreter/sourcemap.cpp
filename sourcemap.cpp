@@ -3,7 +3,14 @@
 // our own header
 #include "sourcemap.h"
 
-#define json_value(json_node)            \
+JsonNode* json_import(const char* str) {
+	if (string(str) == "null") { return json_mknull(); }
+	else if (string(str) == "true") { return json_mkbool(true); }
+	else if (string(str) == "false") { return json_mkbool(false); }
+	else { return json_mkstring(str); }
+}
+
+#define json_export(json_node)            \
   (!json_node ? "null" : string(         \
       json_node->tag == JSON_STRING ?    \
         json_node->string_ :             \
@@ -366,12 +373,12 @@ namespace SourceMap
 			JsonNode* json_sources = json_find_member(json_node, "sources"); // array
 			JsonNode* json_contents = json_find_member(json_node, "sourcesContent"); // array
 
-			file = json_value(json_file);
-			root = json_value(json_root);
-			version = json_value(json_version);
+			file = json_export(json_file);
+			root = json_export(json_root);
+			version = json_export(json_version);
 
 			// assetion for version (must be defined first in source map!)
-			if (json_value(json_version) != "3") {
+			if (json_export(json_version) != "3") {
 				// must be defined first in source map actually
 				throw(string("only source map version 3 is supported"));
 			}
@@ -382,7 +389,7 @@ namespace SourceMap
 			)) {
 				JsonNode* json_token(0);
 				json_foreach(json_token, json_tokens) {
-					tokens.push_back(json_value(json_token));
+					tokens.push_back(json_export(json_token));
 				}
 			}
 
@@ -392,7 +399,7 @@ namespace SourceMap
 			)) {
 				JsonNode* json_source(0);
 				json_foreach(json_source, json_sources) {
-					sources.push_back(json_value(json_source));
+					sources.push_back(json_export(json_source));
 				}
 			}
 
@@ -400,13 +407,13 @@ namespace SourceMap
 					json_contents->tag == JSON_ARRAY ||
 					json_contents->tag == JSON_OBJECT
 			)) {
-				JsonNode* json_contents(0);
-				json_foreach(json_contents, json_contents) {
-					contents.push_back(json_value(json_contents));
+				JsonNode* json_content(0);
+				json_foreach(json_content, json_contents) {
+					contents.push_back(json_export(json_content));
 				}
 			}
 
-			map = new Mapping(json_value(json_mappings));
+			map = new Mapping(json_export(json_mappings));
 
 		}
 
@@ -435,33 +442,36 @@ namespace SourceMap
 
 		json_append_member(json_node, "version", json_mknumber(3));
 
-		JsonNode* json_file = json_mkstring(file.c_str());
+		JsonNode* json_file = json_import(file.c_str());
 		json_append_member(json_node, "file", json_file);
 
+		size_t sources_size = sources.size();
 		JsonNode* json_sources = json_mkarray();
-		for (size_t i = 0; i < sources.size(); ++i) {
+		for (size_t i = 0; i < sources_size; ++i) {
 			const char* include = sources[i].c_str();
-			JsonNode* json_source = json_mkstring(include);
+			JsonNode* json_source = json_import(include);
 			json_append_element(json_sources, json_source);
 		}
 		json_append_member(json_node, "sources", json_sources);
 
+		size_t contents_size = contents.size();
 		JsonNode* json_contents = json_mkarray();
-		for (size_t i = 1; i < contents.size(); ++i) {
+		for (size_t i = 0; i < contents_size; ++i) {
 			const char* content = contents[i].c_str();
-			JsonNode* json_content = json_mkstring(content);
+			JsonNode* json_content = json_import(content);
 			json_append_element(json_contents, json_content);
 		}
 		json_append_member(json_node, "sourcesContent", json_contents);
 
 		string mappings = map->serialize();
-		JsonNode* json_mappings = json_mkstring(mappings.c_str());
+		JsonNode* json_mappings = json_import(mappings.c_str());
 		json_append_member(json_node, "mappings", json_mappings);
 
+		size_t tokens_size = tokens.size();
 		JsonNode* json_tokens = json_mkarray();
-		for (size_t i = 1; i < tokens.size(); ++i) {
+		for (size_t i = 0; i < tokens_size; ++i) {
 			const char* token = tokens[i].c_str();
-			JsonNode* json_token = json_mkstring(token);
+			JsonNode* json_token = json_import(token);
 			json_append_element(json_tokens, json_token);
 		}
 		json_append_member(json_node, "names", json_tokens);
