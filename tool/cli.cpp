@@ -97,6 +97,33 @@ int main (int argc, char** argv)
 	try
 	{
 
+		// print map debug
+		if (debug_map)
+		{
+
+			SrcMap* srcmap = new SrcMap(data);
+			Mapping* map = srcmap->getMap();
+
+			cout << "file: " << srcmap->getFile() << endl;
+			cout << "root: " << srcmap->getRoot() << endl;
+
+			for(size_t i = 0; i < map->getLength(); i++) {
+				Row* row = map->getRow(i);
+				for(size_t n = 0; n < row->getLength(); n++) {
+					Entry* entry = row->getEntry(n);
+					if (entry->getLength() == 1) {
+						cout << entry->getCol() << endl;
+					} else if (entry->getLength() == 4) {
+						cout << entry->getCol() << ":" << entry->getSource() << "=" << srcmap->getSource(entry->getSource()) << ":" << entry->getSrcLine() << ":" << entry->getSrcCol() << ":" << endl;
+					} else if (entry->getLength() == 5) {
+						cout << entry->getCol() << ":" << entry->getSource() << "=" << srcmap->getSource(entry->getSource()) << ":" << entry->getSrcLine() << ":" << entry->getSrcCol() << ":" << entry->getToken() << "=" << srcmap->getToken(entry->getToken()) << endl;
+					}
+				}
+			}
+
+		}
+		// EO debug_map
+
 		// run internal code coverage test
 		// we will compare data and output TAP
 		// tests if encode(decode(data)) == data
@@ -107,45 +134,26 @@ int main (int argc, char** argv)
 			string json = (new SrcMap(data))->serialize();
 			JsonNode* json_b = json_decode(json.c_str());
 
+			// check if we have the same information
+			bool pass = json_cmp_property(json_a, json_b, "file") &&
+			            json_cmp_property(json_a, json_b, "names") &&
+			            json_cmp_property(json_a, json_b, "version") &&
+			            json_cmp_property(json_a, json_b, "mappings") &&
+			            json_cmp_property(json_a, json_b, "lineCount") &&
+			            json_cmp_property(json_a, json_b, "sourceRoot") &&
+			            json_cmp_property(json_a, json_b, "sourcesContent");
+
+
 			// output TAP test compatible string
-			cout << ((
-					json_cmp_property(json_a, json_b, "file") &&
-					json_cmp_property(json_a, json_b, "mappings") &&
-					json_cmp_property(json_a, json_b, "lineCount") &&
-					json_cmp_property(json_a, json_b, "sourceRoot") &&
-					json_cmp_property(json_a, json_b, "sourcesContent") &&
-					json_cmp_property(json_a, json_b, "names") &&
-					json_cmp_property(json_a, json_b, "version")
-				) ? "ok" : "not ok"
-			) << endl;
+			cout << (pass ? "ok" : "not ok") << endl;
+
+			// indicate failure on test
+			if (!pass) return EXIT_FAILURE;
 
 		}
 		// EO test_map
 
-		// print map debug
-		if (debug_map)
-		{
-
-			SrcMap* srcmap = new SrcMap(data);
-			Mapping* map = srcmap->getMap();
-
-			for(size_t i = 0; i < map->getLength(); i++) {
-				Row* row = map->getRow(i);
-				for(size_t n = 0; n < row->getLength(); n++) {
-					Entry* entry = row->getEntry(n);
-					if (entry->getLength() == 1) {
-						cout << entry->getCol() << endl;
-					} else if (entry->getLength() == 4) {
-						cout << entry->getCol() << ":" << entry->getSource() << ":" << entry->getSrcLine() << ":" << entry->getSrcCol() << ":" << endl;
-					} else if (entry->getLength() == 5) {
-						cout << entry->getCol() << ":" << entry->getSource() << ":" << entry->getSrcLine() << ":" << entry->getSrcCol() << ":" << entry->getToken() << endl;
-					}
-				}
-			}
-
-		}
 	}
-	// EO debug_map
 	catch(string& e)
 	{
 		cerr << "parsing error: " << e << endl;
