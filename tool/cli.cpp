@@ -33,6 +33,7 @@ int main (int argc, char** argv)
 	// execute option
 	int test_map = 0;
 	int debug_map = 0;
+	int remap_map = 0;
 
 	// process command line arguments
 	for (int i = 1; i < argc; ++i)
@@ -43,6 +44,10 @@ int main (int argc, char** argv)
 		if (arg == "-t" || arg == "--test")
 		{
 			test_map = 1;
+		}
+		else if (arg == "-r" || arg == "--remap")
+		{
+			remap_map = 1;
 		}
 		// handle debug mappings option
 		else if (arg == "-d" || arg == "--debug-maps")
@@ -58,6 +63,7 @@ int main (int argc, char** argv)
 			cout << "-h, --help         print this help text" << endl;
 			cout << "-t, --test         code coverage test" << endl;
 			cout << "-v, --version      version information" << endl;
+			cout << "-r, --remap        remap" << endl;
 			exit(0);
 		}
 		else if (arg == "-v" || arg == "--version")
@@ -110,13 +116,13 @@ int main (int argc, char** argv)
 			for(size_t i = 0; i < map->getLength(); i++) {
 				Row* row = map->getRow(i);
 				for(size_t n = 0; n < row->getLength(); n++) {
-					Entry* entry = row->getEntry(n);
-					if (entry->getLength() == 1) {
-						cout << entry->getCol() << endl;
-					} else if (entry->getLength() == 4) {
-						cout << entry->getCol() << ":" << entry->getSource() << "=" << srcmap->getSource(entry->getSource()) << ":" << entry->getSrcLine() << ":" << entry->getSrcCol() << ":" << endl;
-					} else if (entry->getLength() == 5) {
-						cout << entry->getCol() << ":" << entry->getSource() << "=" << srcmap->getSource(entry->getSource()) << ":" << entry->getSrcLine() << ":" << entry->getSrcCol() << ":" << entry->getToken() << "=" << srcmap->getToken(entry->getToken()) << endl;
+					Entry entry = row->getEntry(n);
+					if (entry.getLength() == 1) {
+						cout << entry.getCol() << endl;
+					} else if (entry.getLength() == 4) {
+						cout << entry.getCol() << ":" << entry.getSource() << "=" << srcmap->getSource(entry.getSource()) << "|" << entry.getSource() << ":" << entry.getSrcLine() << ":" << entry.getSrcCol() << ":" << endl;
+					} else if (entry.getLength() == 5) {
+						cout << entry.getCol() << ":" << entry.getSource() << "=" << srcmap->getSource(entry.getSource()) << ":" << entry.getSrcLine() << ":" << entry.getSrcCol() << ":" << entry.getToken() << "=" << srcmap->getToken(entry.getToken()) << endl;
 					}
 				}
 			}

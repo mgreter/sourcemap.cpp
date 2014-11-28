@@ -13,5 +13,4 @@
 *.a
 
 # Compiled Executables
-/sourcemap
-/sourcemap.exe
+*.exe

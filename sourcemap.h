@@ -4,6 +4,7 @@
 #include <string>
 #include <cstring>
 #include <iostream>
+#include <algorithm>
 
 #include "json.hpp"
 
@@ -22,8 +23,24 @@ namespace SourceMap
 	// compile with g++ -DVERSION="\"vX.X.X\""
 	const string SOURCEMAP_VERSION = VERSION;
 
+	class SrcMapPos
+	{
+		public:
+			SrcMapPos();
+			SrcMapPos(size_t row, size_t col);
+		public:
+			size_t row;
+			size_t col;
+	};
+
+	const SrcMapPos SrcMapPosStart(0, 0);
+	const SrcMapPos SrcMapPosError(-1, -1);
+
 	class Entry
 	{
+		friend class Row;
+		friend class Mapping;
+		friend class SrcMap;
 		public:
 			Entry(); // ctor
 			Entry(size_t col); // ctor
@@ -35,37 +52,55 @@ namespace SourceMap
 			const size_t getSrcLine();
 			const size_t getSrcCol();
 			const size_t getToken();
-		private:
+		public: // protected:
 			vector<size_t> values;
+
+		public:
+		bool operator== (const Entry &entry);
+		bool operator!= (const Entry &entry);
+
 	};
 
 	class Row
 	{
+		friend class Entry;
+		friend class Mapping;
+		friend class SrcMap;
 		public:
 			Row(); // ctor
 			const size_t getLength();
-			Entry* getEntry(size_t idx);
-			void addEntry(Entry* entry);
-		private:
-			vector<Entry*> entries;
+			Entry getEntry(size_t idx);
+			void addEntry(Entry entry);
+			size_t getIndexAtPosition(size_t col);
+			vector<Entry> getEntryAtPosition(size_t col);
+		public: // protected:
+			vector<Entry> entries;
 	};
 
 	class Mapping
 	{
+		friend class Entry;
+		friend class Row;
+		friend class SrcMap;
 		public:
 			Mapping(); // ctor
 			Mapping(string VLQ); // ctor
 			const size_t getLength();
 			Row* getRow(size_t idx);
 			void addRow(Row* row);
+			void addNewLine();
 			string serialize();
-		private:
+			vector<Entry> getEntryAtPosition(size_t row, size_t col);
+		public: // protected:
 			vector<Row*> rows;
 			void init(string VLQ);
 	};
 
 	class SrcMap
 	{
+		friend class Entry;
+		friend class Row;
+		friend class Mapping;
 		public:
 			SrcMap(); // ctor
 			SrcMap(string json_str); // ctor
@@ -78,11 +113,25 @@ namespace SourceMap
 			string getContent(size_t idx);
 			// use enc to disable map encoding
 			string serialize(bool enc = true);
-		private:
+
+			void addToken(string token);
+			void addSource(string file);
+			void setLastLineLength(size_t len);
+
+			void insert(size_t row, Entry entry, bool after = false);
+			size_t getIndexAtPosition(SrcMapPos pos);
+
+			// change the original mappings
+			SrcMap* remap(SrcMap* srcmap);
+			void mergePrepare(SrcMap* srcmap);
+			void splice(SrcMapPos pos, SrcMapPos del, SrcMap* srcmap);
+
+		public: // protected:
 			string file;
 			string root;
 			Mapping* map;
 			string version;
+			SrcMapPos size;
 			vector<string> tokens;
 			vector<string> sources;
 			vector<string> contents;
