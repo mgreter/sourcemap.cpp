@@ -1,3 +1,5 @@
+CXX = g++.exe
+CXXFLAGS ?= -g -Wall
 
 GIT_VERSION := $(shell git describe --abbrev=4 --dirty --always)
 
@@ -5,35 +7,87 @@ ifeq ($(OS),Windows_NT)
 	MV ?= move
 	CP ?= copy /Y
 	RM ?= del /Q /F
-	EXESUFFIX = .exe
-	SUFFIX = 2>NULL
-	RMFIX = 2>NUL
 else
 	MV ?= mv -f
 	CP ?= cp -f
 	RM ?= rm -rf
-	EXESUFFIX =
-	SUFFIX =
 endif
 
-all: sourcemap$(EXESUFFIX)
+_lib_src = json.cpp \
+           sourcemap.cpp \
 
-cli.o: tool/cli.cpp
-	g++ -DVERSION="\"$(GIT_VERSION)\"" $(EXTRA_CFLAGS) -Wall -c tool/cli.cpp
+_test_src = UnitTest++/src/AssertException.cpp \
+            UnitTest++/src/Test.cpp \
+            UnitTest++/src/Checks.cpp \
+            UnitTest++/src/TestRunner.cpp \
+            UnitTest++/src/TestResults.cpp \
+            UnitTest++/src/TestReporter.cpp \
+            UnitTest++/src/TestReporterStdout.cpp \
+            UnitTest++/src/ReportAssert.cpp \
+            UnitTest++/src/TestList.cpp \
+            UnitTest++/src/TimeConstraint.cpp \
+            UnitTest++/src/TestDetails.cpp \
+            UnitTest++/src/MemoryOutStream.cpp \
+            UnitTest++/src/DeferredTestReporter.cpp \
+            UnitTest++/src/DeferredTestResult.cpp \
+            UnitTest++/src/XmlTestReporter.cpp \
+            UnitTest++/src/CurrentTest.cpp
 
-json.o: json.cpp
-	g++ -DVERSION="\"$(GIT_VERSION)\"" $(EXTRA_CFLAGS) -Wall -c json.cpp
+_lib_prog = tool/cli.cpp
+_test_prog = test/test.cpp
 
-sourcemap.o: sourcemap.cpp
-	g++ -DVERSION="\"$(GIT_VERSION)\"" $(EXTRA_CFLAGS) -Wall -c sourcemap.cpp
+ifeq ($(OS),Windows_NT)
+	_test_src += UnitTest++/src/Win32/TimeHelpers.cpp
+else
+	_test_src += UnitTest++/src/Posix/TimeHelpers.cpp \
+	             UnitTest++/src/Posix/SignalTranslator.cpp
+endif
 
-sourcemap$(EXESUFFIX): sourcemap.o json.o cli.o
-	g++ -DVERSION="\"$(GIT_VERSION)\"" $(EXTRA_LDFLAGS) -Wall -o sourcemap cli.o json.o sourcemap.o
+tool = sourcemap
+test = testsuite
+ifeq ($(OS),Windows_NT)
+	tool = sourcemap.exe
+	test = testsuite.exe
+	lib_src = $(subst,/,\ $(_lib_src))
+	test_src = $(subst,/,\ $(_test_src))
+	lib_prog = $(subst,/,\ $(_lib_prog))
+	test_prog = $(subst,/,\ $(_test_prog))
+else
+	lib_src = _lib_src
+	test_src = _test_src
+	lib_prog = _lib_prog
+	test_prog = _test_prog
+endif
+
+lib_objects = $(subst,.cpp,.o $(lib_src))
+test_objects = $(subst,.cpp,.o $(test_src))
+
+all: $(tool) $(test)
+
+tool: $(tool)
+test: $(test)
+	ifeq ($(OS),Windows_NT)
+		$(test)
+	else
+		./$(test)
+	endif
+
+%.o: %.cpp
+	@echo compile $<
+	@$(CXX) $(CXXFLAGS) $(EXTRA_CFLAGS) -DVERSION="\"$(GIT_VERSION)\"" -c $< -o $@
+
+$(tool): $(lib_prog) $(lib_objects)
+	@echo link $@
+	@$(CXX) $(CXXFLAGS) $(EXTRA_CFLAGS) -DVERSION="\"$(GIT_VERSION)\"" $(EXTRA_LDFLAGS) -o $(tool) $(lib_prog) $(lib_objects)
+
+$(test): $(test_prog) $(lib_objects) $(test_objects)
+	@echo link $@
+	@$(CXX) $(CXXFLAGS) $(EXTRA_CFLAGS) -DVERSION="\"$(GIT_VERSION)\"" $(EXTRA_LDFLAGS) -o $(test) $(test_prog) $(lib_objects) $(test_objects)
 
 clean:
-	$(RM) sourcemap.exe $(SUFFIX)
-	$(RM) sourcemap.o $(SUFFIX)
-	$(RM) sourcemap $(SUFFIX)
-	$(RM) json.o $(SUFFIX)
+	@$(RM) $(foreach,f,$(tool) "$f")
+	@$(RM) $(foreach,f,$(test) "$f")
+	@$(RM) $(foreach,f,$(lib_objects) "$f")
+	@$(RM) $(foreach,f,$(test_objects) "$f")
 
-.PHONY: clean
+.PHONY: clean test tool all
