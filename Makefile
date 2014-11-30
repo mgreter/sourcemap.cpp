@@ -1,5 +1,5 @@
-CXX = g++.exe
-CXXFLAGS ?= -g -Wall
+CXX = g++
+CXXFLAGS = -g -Wall
 
 GIT_VERSION := $(shell git describe --abbrev=4 --dirty --always)
 
@@ -7,10 +7,11 @@ ifeq ($(OS),Windows_NT)
 	MV ?= move
 	CP ?= copy /Y
 	RM ?= del /Q /F
+	RM = rm -f
 else
 	MV ?= mv -f
 	CP ?= cp -f
-	RM ?= rm -rf
+	RM ?= rm -f
 endif
 
 _lib_src = json.cpp \
@@ -48,29 +49,27 @@ test = testsuite
 ifeq ($(OS),Windows_NT)
 	tool = sourcemap.exe
 	test = testsuite.exe
+	testsuite = $(test)
 	lib_src = $(subst,/,\ $(_lib_src))
 	test_src = $(subst,/,\ $(_test_src))
 	lib_prog = $(subst,/,\ $(_lib_prog))
 	test_prog = $(subst,/,\ $(_test_prog))
 else
-	lib_src = _lib_src
-	test_src = _test_src
-	lib_prog = _lib_prog
-	test_prog = _test_prog
+	testsuite = ./$(test)
+	lib_src = $(_lib_src)
+	test_src = $(_test_src)
+	lib_prog = $(_lib_prog)
+	test_prog = $(_test_prog)
 endif
 
-lib_objects = $(subst,.cpp,.o $(lib_src))
-test_objects = $(subst,.cpp,.o $(test_src))
+lib_objects = $(lib_src:.cpp=.o)
+test_objects = $(test_src:.cpp=.o)
 
 all: $(tool) $(test)
 
 tool: $(tool)
 test: $(test)
-	ifeq ($(OS),Windows_NT)
-		$(test)
-	else
-		./$(test)
-	endif
+	@$(testsuite)
 
 %.o: %.cpp
 	@echo compile $<
@@ -85,9 +84,9 @@ $(test): $(test_prog) $(lib_objects) $(test_objects)
 	@$(CXX) $(CXXFLAGS) $(EXTRA_CFLAGS) -DVERSION="\"$(GIT_VERSION)\"" $(EXTRA_LDFLAGS) -o $(test) $(test_prog) $(lib_objects) $(test_objects)
 
 clean:
-	@$(RM) $(foreach,f,$(tool) "$f")
-	@$(RM) $(foreach,f,$(test) "$f")
-	@$(RM) $(foreach,f,$(lib_objects) "$f")
-	@$(RM) $(foreach,f,$(test_objects) "$f")
+	@$(RM) $(tool)
+	@$(RM) $(test)
+	@$(RM) $(lib_objects)
+	@$(RM) $(test_objects)
 
 .PHONY: clean test tool all

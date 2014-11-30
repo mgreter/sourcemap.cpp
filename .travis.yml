@@ -5,11 +5,11 @@ compiler:
   - clang
 
 install: sudo pip install cpp-coveralls
-script: EXTRA_CFLAGS="--coverage" EXTRA_LDFLAGS="-coverage" make
+script: EXTRA_CFLAGS="--coverage" EXTRA_LDFLAGS="-coverage" make tool test -j4
 after_success:
   - ./sourcemap -v
   - ./sourcemap --help
   - ./sourcemap -t < test/output.js.map
   - ./sourcemap -d < test/output.js.map > /dev/null
-  - coveralls --exclude json.cpp --exclude json.hpp --gcov-options '\-lp'
+  - coveralls --exclude json.cpp --exclude json.hpp --exclude UnitTest++ --gcov-options '\-lp'
 
