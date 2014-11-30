@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -g -Wall
+CXXFLAGS = -g -Wall -fopenmp
 
 GIT_VERSION := $(shell git describe --abbrev=4 --dirty --always)
 
@@ -64,6 +64,7 @@ endif
 
 lib_objects = $(lib_src:.cpp=.o)
 test_objects = $(test_src:.cpp=.o)
+testsuite_objects = $(test_prog:.cpp=.o)
 
 all: $(tool) $(test)
 
@@ -79,9 +80,9 @@ $(tool): $(lib_prog) $(lib_objects)
 	@echo link $@
 	@$(CXX) $(CXXFLAGS) $(EXTRA_CFLAGS) -DVERSION="\"$(GIT_VERSION)\"" $(EXTRA_LDFLAGS) -o $(tool) $(lib_prog) $(lib_objects)
 
-$(test): $(test_prog) $(lib_objects) $(test_objects)
+$(test): $(testsuite_objects) $(lib_objects) $(test_objects)
 	@echo link $@
-	@$(CXX) $(CXXFLAGS) $(EXTRA_CFLAGS) -DVERSION="\"$(GIT_VERSION)\"" $(EXTRA_LDFLAGS) -o $(test) $(test_prog) $(lib_objects) $(test_objects)
+	@$(CXX) $(CXXFLAGS) $(EXTRA_CFLAGS) -DVERSION="\"$(GIT_VERSION)\"" $(EXTRA_LDFLAGS) -o $(test) $(testsuite_objects) $(lib_objects) $(test_objects)
 
 clean:
 	@$(RM) $(tool)

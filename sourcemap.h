@@ -111,12 +111,19 @@ namespace SourceMap
 			string getToken(size_t idx);
 			string getSource(size_t idx);
 			string getContent(size_t idx);
+
+			size_t getTokenSize() { return tokens.size(); };
+			size_t getSourceSize() { return sources.size(); };
+
 			// use enc to disable map encoding
 			string serialize(bool enc = true);
 
+			void debug();
 			void addToken(string token);
 			void addSource(string file);
 			void setLastLineLength(size_t len);
+
+			Entry getEntry(size_t row_idx, size_t entry_idx);
 
 			void insert(size_t row, Entry entry, bool after = false);
 			size_t getIndexAtPosition(SrcMapPos pos);
@@ -124,6 +131,8 @@ namespace SourceMap
 			// change the original mappings
 			SrcMap* remap(SrcMap* srcmap);
 			void mergePrepare(SrcMap* srcmap);
+			void splice(SrcMapPos pos, SrcMapPos del);
+			void splice(SrcMapPos pos, SrcMap* srcmap);
 			void splice(SrcMapPos pos, SrcMapPos del, SrcMap* srcmap);
 
 		public: // protected:

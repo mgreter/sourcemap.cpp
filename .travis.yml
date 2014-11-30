@@ -10,6 +10,6 @@ after_success:
   - ./sourcemap -v
   - ./sourcemap --help
   - ./sourcemap -t < test/output.js.map
-  - ./sourcemap -d < test/output.js.map > /dev/null
+  - ./sourcemap -r -d < test/output.js.map > /dev/null
   - coveralls --exclude json.cpp --exclude json.hpp --exclude UnitTest++ --gcov-options '\-lp'
 

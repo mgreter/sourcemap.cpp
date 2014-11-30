@@ -1,4 +1,5 @@
 // include library
+#include <omp.h>
 #include <stack>
 #include <string>
 #include <cstring>
@@ -103,11 +104,23 @@ int main (int argc, char** argv)
 	try
 	{
 
+		SrcMap* srcmap = new SrcMap(data);
+
+		if (remap_map)
+		{
+
+			srcmap->debug();
+			srcmap = srcmap->remap(srcmap);
+			srcmap->debug();
+			srcmap->splice(SrcMapPos(0, 0), SrcMapPos(0, 0), srcmap);
+			srcmap->debug();
+
+		}
+
 		// print map debug
 		if (debug_map)
 		{
 
-			SrcMap* srcmap = new SrcMap(data);
 			Mapping* map = srcmap->getMap();
 
 			cout << "file: " << srcmap->getFile() << endl;
@@ -159,6 +172,11 @@ int main (int argc, char** argv)
 		}
 		// EO test_map
 
+	}
+	catch(exception& e)
+	{
+		cerr << "error: " << e.what() << endl;
+		return EXIT_FAILURE;
 	}
 	catch(string& e)
 	{

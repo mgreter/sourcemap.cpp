@@ -17,10 +17,13 @@ class Timer
 public:
     Timer();
 	void Start();
-	int GetTimeInMs() const;    
+	int GetTimeInMs() const;
 
 private:
     __int64 GetTime() const;
+
+	__int64 m_startTime;
+	__int64 m_frequency;
 
     void* m_threadHandle;
 
@@ -30,8 +33,6 @@ private:
     unsigned long m_processAffinityMask;
 #endif
 
-	__int64 m_startTime;
-	__int64 m_frequency;
 };
 
 

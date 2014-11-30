@@ -1,4 +1,6 @@
 // include library
+#include <omp.h>
+#include <stdexcept>
 
 // our own header
 #include "sourcemap.h"
@@ -9,6 +11,15 @@ JsonNode* json_import(const char* str) {
 	else if (string(str) == "false") { return json_mkbool(false); }
 	else { return json_mkstring(str); }
 }
+
+#define json_double(json_node)           \
+  (!json_node ? -1 :                     \
+      json_node->tag == JSON_NUMBER ?    \
+        json_node->number_ :             \
+      json_node->tag == JSON_STRING ?    \
+        atof(json_node->string_) :       \
+          -1                             \
+  )
 
 #define json_export(json_node)           \
   (!json_node ? "null" : string(         \
@@ -77,7 +88,7 @@ namespace SourceMap
 		else if (i > 51 && i < 62) { return char(i - 4); }
 		else if (i == 62) { return char(43); }
 		else if (i == 63) { return char(47); }
-		throw(string("base 64 integer out of bound"));
+		throw(invalid_argument("base 64 integer out of bound"));
 	}
 
 	/**
@@ -89,7 +100,7 @@ namespace SourceMap
 		else if (c > 47 && c < 59) { return c + 4; }
 		else if (c == 43) { return 62; }
 		else if (c == 47) { return 63; }
-		throw(string("base 64 char out of bound"));
+		throw(invalid_argument("base 64 char out of bound"));
 	}
 
 	/**
@@ -183,29 +194,29 @@ namespace SourceMap
 	const size_t Entry::getLength() { return values.size(); }
 	const size_t Mapping::getLength() { return rows.size(); }
 
+	Entry SrcMap::getEntry(size_t row_idx, size_t entry_idx) {
+		return map->getRow(row_idx)->getEntry(entry_idx);
+	}
 
 	Entry Row::getEntry(size_t idx) {
 		if (idx >= 0 && idx < entries.size()) {
 			return entries[idx];
 		}
-		throw("out of bound");
+		throw(invalid_argument("getEntry out of bound"));
 	}
 
-		bool Entry::operator== (const Entry &entry){
-			cerr << "asd " << values[0] << " vs " << entry.values[0] << "\n";
-			return (values[0] == entry.values[0]);
-		};
-		bool Entry::operator!= (const Entry &entry){
-			cerr << "asd 2\n";
-			return (values[0] != entry.values[0]);
-		};
-
+	bool Entry::operator== (const Entry &entry){
+		return (values[0] == entry.values[0]);
+	};
+	bool Entry::operator!= (const Entry &entry){
+		return (values[0] != entry.values[0]);
+	};
 
 	Row* Mapping::getRow(size_t idx) {
 		if (idx >= 0 && idx < rows.size()) {
 			return rows[idx];
 		}
-		throw("out of bound");
+		throw(invalid_argument("getRow out of bound"));
 	}
 
 	// ToDo: check for out of bound access
@@ -214,7 +225,6 @@ namespace SourceMap
 	const size_t Entry::getSrcLine() { return values[2]; }
 	const size_t Entry::getSrcCol() { return values[3]; }
 	const size_t Entry::getToken() { return values[4]; }
-
 
 	string Mapping::serialize()
 	{
@@ -330,7 +340,7 @@ namespace SourceMap
 				// empty rows are allowed
 				else if (values.size() != 0) {
 					// everything else is not valid
-					throw(string("invalid source map entry"));
+					throw(runtime_error("invalid source map entry"));
 				}
 
 				// create a new row
@@ -382,21 +392,21 @@ namespace SourceMap
 	string SrcMap::getToken(size_t idx)
 	{
 		if (idx < 0 || idx >= tokens.size())
-		{ throw(string("token access out of bound")); }
+		{ throw(runtime_error("token access out of bound")); }
 		return tokens[idx];
 	}
 
 	string SrcMap::getSource(size_t idx)
 	{
 		if (idx < 0 || idx >= sources.size())
-		{ throw(string("source access out of bound")); }
+		{ throw(runtime_error("source access out of bound")); }
 		return sources[idx];
 	}
 
 	string SrcMap::getContent(size_t idx)
 	{
 		if (idx < 0 || idx >= contents.size())
-		{ throw(string("content access out of bound")); }
+		{ throw(runtime_error("content access out of bound")); }
 		return contents[idx];
 	}
 
@@ -412,6 +422,7 @@ namespace SourceMap
 			JsonNode* json_tokens = json_find_member(json_node, "names"); // array
 			JsonNode* json_sources = json_find_member(json_node, "sources"); // array
 			JsonNode* json_contents = json_find_member(json_node, "sourcesContent"); // array
+			JsonNode* json_lastLineLength = json_find_member(json_node, "x_lastLineSize"); // string
 
 			file = json_export(json_file);
 			root = json_export(json_root);
@@ -420,7 +431,7 @@ namespace SourceMap
 			// assetion for version (must be defined first in source map!)
 			if (json_export(json_version) != "3") {
 				// must be defined first in source map actually
-				throw(string("only source map version 3 is supported"));
+				throw(runtime_error("only source map version 3 is supported"));
 			}
 
 			if (json_tokens && (
@@ -454,6 +465,9 @@ namespace SourceMap
 			}
 
 			map = new Mapping(json_export(json_mappings));
+
+			size.row = map->rows.size();
+			size.col = (int) json_double(json_lastLineLength);
 
 		}
 
@@ -550,6 +564,8 @@ namespace SourceMap
 
 		size_t i = 0;
 
+		double start = omp_get_wtime();
+
 		size_t offset = sources.size();
 
 		foreach(string, source, srcmap->sources) {
@@ -564,10 +580,10 @@ namespace SourceMap
 				// our own source map can only be of one file
 				vector<Entry> originals = srcmap->map->getEntryAtPosition(i, (*entry).getCol());
 
-				foreach(Entry, original, originals) {
-					if (originals.size() > 1) { cerr << "too many mappings for remap\n"; }
-					else if (originals.size() == 0) { cerr << "no mappings for remap\n"; }
-					else {
+				if (originals.size() > 99) { cerr << "too many mappings for remap\n"; }
+				else if (originals.size() == 0) { cerr << "no mappings for remap\n"; }
+				else {
+					foreach(Entry, original, originals) {
 						if ((*entry).values.size() > 0) {
 							(*entry).values[0] = (*original).values[0];
 						}
@@ -584,6 +600,10 @@ namespace SourceMap
 			}
 			i++;
 		}
+
+		double end = omp_get_wtime();
+
+		cerr << "Benchmark: " << (end - start) << endl;
 
 		return this;
 
@@ -609,16 +629,48 @@ namespace SourceMap
 	}
 
 	// bread and butter function that implements all operations
+	void SrcMap::splice(SrcMapPos pos, SrcMapPos del)
+	{
+		splice(pos, del, NULL);
+	}
+
+	// bread and butter function that implements all operations
+	void SrcMap::splice(SrcMapPos pos, SrcMap* srcmap)
+	{
+		splice(pos, SrcMapPos(0, 0), srcmap);
+	}
+
+	// bread and butter function that implements all operations
 	void SrcMap::splice(SrcMapPos pos, SrcMapPos del, SrcMap* srcmap)
 	{
 
-		size_t ins_col = srcmap ? srcmap->size.col : 0;
-		size_t ins_row = srcmap ? srcmap->size.row : 0;
+		if (del.col == string::npos) throw(invalid_argument("splice del.col is invalid"));
+		if (del.row == string::npos) throw(invalid_argument("splice del.row is invalid"));
+		if (pos.col == string::npos) throw(invalid_argument("splice pos.col is invalid"));
+		if (pos.row == string::npos) throw(invalid_argument("splice pos.row is invalid"));
+		if (size.col == string::npos) throw(invalid_argument("splice size.col is invalid"));
+		if (size.row == string::npos) throw(invalid_argument("splice size.row is invalid"));
 
-		if (size.col == string::npos) throw(string("splice size.col is invalid"));
-		if (size.row == string::npos) throw(string("splice size.row is invalid"));
-		if (ins_col == string::npos) throw(string("splice ins_col is invalid"));
-		if (ins_row == string::npos) throw(string("splice ins_row is invalid"));
+		if (srcmap != NULL) {
+			if (srcmap->map == 0) {
+				throw(runtime_error("invalid srcmap"));
+			}
+			if (srcmap->map->rows.size() == 0) {
+				throw(runtime_error("empty srcmap"));
+			}
+		}
+		if (map->rows.size() <= pos.row) {
+			throw(out_of_range("access out of bound"));
+		}
+		if (map->rows.size() <= pos.row + del.row) {
+			throw(out_of_range("delete out of bound"));
+		}
+
+		size_t ins_col = srcmap ? srcmap->size.col : 0;
+		size_t ins_row = srcmap ? srcmap->size.row - 1 : 0;
+
+		if (ins_col == string::npos) throw(invalid_argument("splice ins_col is invalid"));
+		if (ins_row == string::npos) throw(invalid_argument("splice ins_row is invalid"));
 
 		// make sure we have enough room (needed for the lookups)
 		while (map->rows.size() <= pos.row) { map->addNewLine(); }
@@ -641,8 +693,13 @@ namespace SourceMap
 			for_each(buffer.begin(), buffer.end(), adjust_col(-pos.col));
 		}
 
-		// remove the entries from the mapping row
-		entries.erase(entry_it, entry_end);
+		// delete full rows
+		if (del.row > 0) {
+			vector<Entry> &del_row = map->rows[pos.row + del.row]->entries;
+			std::vector<Entry>::iterator del_entries_it = del_row.begin();
+			std::vector<Entry>::iterator del_entries_end = del_row.end();
+			buffer.insert(buffer.end(), del_entries_it, del_entries_end);
+		}
 
 		// delete columns
 		if (del.col > 0) {
@@ -655,42 +712,50 @@ namespace SourceMap
 			// remove all entries in the delete range
 			buffer.erase(buffer.begin(), buffer_it);
 			// account for the deleted offset range
-			for_each(buffer_it, buffer_end, adjust_col(-del.col));
+			for_each(buffer.begin(), buffer.end(), adjust_col(-del.col));
 		}
 
-		// delete full rows
-		if (del.row > 0) {
-			vector<Entry> &del_row = map->rows[pos.row + del.row]->entries;
-			std::vector<Entry>::iterator del_row_it = del_row.begin();
-			std::vector<Entry>::iterator del_row_end = del_row.end();
-			buffer.insert(buffer.end(), del_row_it, del_row_end);
-		}
+		// remove the entries from the mapping row
+		entries.erase(entry_it, entry_end);
 
 		// remove full rows from the current mappings
 		// the remaining line is used for the mangled entries
-		std::vector<Row*>::iterator del_row_it = map->rows.begin() + pos.row + 1;
-		map->rows.erase(del_row_it, del_row_it + del.row);
+		std::vector<Row*>::iterator ins_row_it = map->rows.begin() + pos.row;
+		std::vector<Row*>::iterator del_row_it = map->rows.begin() + pos.row;
+		if (del.row > 0) {
+			map->rows.erase(ins_row_it + 1, del_row_it + 1 + del.row);
+		}
 
 		// increase offset of entries on first line to be inserted
 		// these entries will be placed after the position col offset
 		if (srcmap != NULL) {
+
 			vector<Entry> &ins_first = srcmap->map->rows[0]->entries;
+
 			if (pos.col > 0) {
 				std::vector<Entry>::iterator ins_first_it = ins_first.begin();
 				std::vector<Entry>::iterator ins_first_end = ins_first.end();
 				for_each(ins_first_it, ins_first_end, adjust_col(pos.col));
 			}
+
 			entries.insert(entry_it, ins_first.begin(), ins_first.end());
-			srcmap->map->rows.erase(srcmap->map->rows.begin(), srcmap->map->rows.begin() + 1);
-				// insert complete rows of new source map (depends of del_row and ins_row)
-			map->rows.insert(del_row_it, srcmap->map->rows.begin(), srcmap->map->rows.end());
+
+			if (srcmap->map->rows.size() > 0) {
+				// srcmap->map->rows.erase(srcmap->map->rows.begin(), srcmap->map->rows.begin() + 1);
+			}
+			// insert complete rows of new source map (depends of del_row and ins_row)
+			if (srcmap->map->rows.size() > 1) {
+				map->rows.insert(ins_row_it + 1, srcmap->map->rows.begin() + 1, srcmap->map->rows.end());
+			}
 			// adjust the offsets by the size of the last line that got inserted
 			for_each(buffer.begin(), buffer.end(), adjust_col(ins_col));
 		}
 
 		// insert the buffered entries at the end of the last inserted line
-		vector<Entry> &final_entries = map->rows[pos.row+ins_row - 1]->entries;
+		vector<Entry> &final_entries = map->rows[pos.row + ins_row]->entries;
 		final_entries.insert(final_entries.end(), buffer.begin(), buffer.end());
+
+		size.row += ins_row - del.row;
 
 	}
 
@@ -742,12 +807,7 @@ namespace SourceMap
 
 	size_t Row::getIndexAtPosition(size_t col)
 	{
-
-
 		Entry search(col);
-
-// cerr << "getIndexAtPosition called for " << entries << "\n";
-
 		return std::find(entries.begin(), entries.end(), search) - entries.begin();
 	}
 
@@ -763,13 +823,24 @@ namespace SourceMap
 		std::vector<Entry>::iterator entry_end = qwe->entries.end();
 
 		for(; entry_it != entry_end; ++entry_it) {
-			Entry entry = *entry_it;
+			Entry& entry = *entry_it;
 			if (entry.getCol() == col) {
 				entries.push_back(entry);
 			}
 		}
 
 		return entries;
+	}
+
+	void SrcMap::debug()
+	{
+		size_t count = 0;
+		foreach(Row*, row, map->rows) {
+			foreach(Entry, entry, (*row)->entries) {
+				count ++;
+			}
+		}
+		cerr << "rows: " << size.row << ", entries: " << count << endl;
 	}
 
 }
