@@ -7,7 +7,7 @@
 #include <iostream>
 #include <stdlib.h>
 
-#include "../sourcemap.h"
+#include "sourcemap.h"
 
 // using std::string
 using namespace std;
@@ -104,16 +104,17 @@ int main (int argc, char** argv)
 	try
 	{
 
-		SrcMap* srcmap = new SrcMap(data);
+		SrcMap srcmap(data);
 
 		if (remap_map)
 		{
 
-			srcmap->debug();
-			srcmap = srcmap->remap(srcmap);
-			srcmap->debug();
-			srcmap->splice(SrcMapPos(0, 0), SrcMapPos(0, 0), srcmap);
-			srcmap->debug();
+			cerr << "srcmap: " << srcmap.getMap() << endl;
+			srcmap.remap(srcmap);
+			cerr << "srcmap: " << srcmap.getMap() << endl;
+			SrcMap qwe = srcmap;
+			srcmap.splice(SrcMapPos(0, 0), SrcMapPos(0, 0), qwe);
+			cerr << "srcmap: " << srcmap.getMap() << endl;
 
 		}
 
@@ -121,21 +122,21 @@ int main (int argc, char** argv)
 		if (debug_map)
 		{
 
-			Mapping* map = srcmap->getMap();
+			Mapping map = srcmap.getMap();
 
-			cout << "file: " << srcmap->getFile() << endl;
-			cout << "root: " << srcmap->getRoot() << endl;
+			cout << "file: " << srcmap.getFile() << endl;
+			cout << "root: " << srcmap.getRoot() << endl;
 
-			for(size_t i = 0; i < map->getLength(); i++) {
-				Row* row = map->getRow(i);
-				for(size_t n = 0; n < row->getLength(); n++) {
-					Entry entry = row->getEntry(n);
-					if (entry.getLength() == 1) {
+			for(size_t i = 0; i < map.getRowCount(); i++) {
+				const Row& row = map.getRow(i);
+				for(size_t n = 0; n < row.getEntryCount(); n++) {
+					Entry entry = row.getEntry(n);
+					if (entry.getType() == 1) {
 						cout << entry.getCol() << endl;
-					} else if (entry.getLength() == 4) {
-						cout << entry.getCol() << ":" << entry.getSource() << "=" << srcmap->getSource(entry.getSource()) << "|" << entry.getSource() << ":" << entry.getSrcLine() << ":" << entry.getSrcCol() << ":" << endl;
-					} else if (entry.getLength() == 5) {
-						cout << entry.getCol() << ":" << entry.getSource() << "=" << srcmap->getSource(entry.getSource()) << ":" << entry.getSrcLine() << ":" << entry.getSrcCol() << ":" << entry.getToken() << "=" << srcmap->getToken(entry.getToken()) << endl;
+					} else if (entry.getType() == 4) {
+						cout << entry.getCol() << ":" << entry.getSource() << "=" << srcmap.getSource(entry.getSource()) << "|" << entry.getSource() << ":" << entry.getSrcLine() << ":" << entry.getSrcCol() << ":" << endl;
+					} else if (entry.getType() == 5) {
+						cout << entry.getCol() << ":" << entry.getSource() << "=" << srcmap.getSource(entry.getSource()) << ":" << entry.getSrcLine() << ":" << entry.getSrcCol() << ":" << entry.getToken() << "=" << srcmap.getToken(entry.getToken()) << endl;
 					}
 				}
 			}

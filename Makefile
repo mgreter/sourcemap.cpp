@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -g -Wall -fopenmp
+CXXFLAGS = -Wall -fopenmp -O2 -I src -I json -I UnitTest++/src
 
 GIT_VERSION := $(shell git describe --abbrev=4 --dirty --always)
 
@@ -14,8 +14,14 @@ else
 	RM ?= rm -f
 endif
 
-_lib_src = json.cpp \
-           sourcemap.cpp \
+_lib_src = json/json.cpp \
+           src/row.cpp \
+           src/index.cpp \
+           src/entry.cpp \
+           src/mapping.cpp \
+           src/position.cpp \
+           src/format/v3.cpp \
+           src/sourcemap.cpp
 
 _test_src = UnitTest++/src/AssertException.cpp \
             UnitTest++/src/Test.cpp \
@@ -89,5 +95,6 @@ clean:
 	@$(RM) $(test)
 	@$(RM) $(lib_objects)
 	@$(RM) $(test_objects)
+	@$(RM) $(testsuite_objects)
 
 .PHONY: clean test tool all

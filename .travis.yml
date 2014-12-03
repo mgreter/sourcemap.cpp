@@ -11,5 +11,5 @@ after_success:
   - ./sourcemap --help
   - ./sourcemap -t < test/output.js.map
   - ./sourcemap -r -d < test/output.js.map > /dev/null
-  - coveralls --exclude json.cpp --exclude json.hpp --exclude UnitTest++ --gcov-options '\-lp'
+  - coveralls --exclude json --exclude UnitTest++ --gcov-options '\-lp'
 
