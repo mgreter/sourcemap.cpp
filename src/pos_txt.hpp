@@ -5,10 +5,8 @@
 #include <string>
 #include <cstring>
 #include <iostream>
-#include <algorithm>
 
-// using std::string
-using namespace std;
+#include "sourcemap.hpp"
 
 // add namespace for c++
 namespace SourceMap
@@ -16,9 +14,9 @@ namespace SourceMap
 
 	class SrcMapPos
 	{
-		friend class Row;
-		friend class Mapping;
-		friend class SrcMap;
+		friend class LineMap;
+		friend class Mappings;
+		friend class SrcMapDoc;
 		public: // ctor
 			SrcMapPos();
 			SrcMapPos(const string& data);
@@ -34,10 +32,10 @@ namespace SourceMap
 			// length of each line, so we cannot calculate col
 			friend ostream& operator<<(ostream& os, const SrcMapPos& pos);
 		public: // setters
-			void getRow(size_t row) { this->row = row; };
+			void getLineMap(size_t row) { this->row = row; };
 			void getCol(size_t col) { this->col = col; };
 		public: // getters
-			size_t getRow() const { return row; };
+			size_t getLineMap() const { return row; };
 			size_t getCol() const { return col; };
 		public: // variables
 			size_t row;

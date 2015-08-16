@@ -1,5 +1,6 @@
+CC = gcc
 CXX = g++
-CXXFLAGS = -Wall -fopenmp -O2 -I src -I json -I UnitTest++/src
+CXXFLAGS = -Wall -fopenmp -O2 -I src -I deps/cencode -I deps/json -I deps/UnitTest++/src
 
 GIT_VERSION := $(shell git describe --abbrev=4 --dirty --always)
 
@@ -7,47 +8,48 @@ ifeq ($(OS),Windows_NT)
 	MV ?= move
 	CP ?= copy /Y
 	RM ?= del /Q /F
-	RM = rm -f
 else
 	MV ?= mv -f
 	CP ?= cp -f
 	RM ?= rm -f
 endif
 
-_lib_src = json/json.cpp \
-           src/row.cpp \
-           src/index.cpp \
-           src/entry.cpp \
-           src/mapping.cpp \
-           src/position.cpp \
+_lib_src = deps/json/json.cpp \
+           deps/cencode/cencode.c \
+           deps/cencode/cdecode.c \
+           src/map_line.cpp \
+           src/map_col.cpp \
+           src/mappings.cpp \
+           src/pos_idx.cpp \
+           src/pos_txt.cpp \
            src/format/v3.cpp \
-           src/sourcemap.cpp
+           src/document.cpp
 
-_test_src = UnitTest++/src/AssertException.cpp \
-            UnitTest++/src/Test.cpp \
-            UnitTest++/src/Checks.cpp \
-            UnitTest++/src/TestRunner.cpp \
-            UnitTest++/src/TestResults.cpp \
-            UnitTest++/src/TestReporter.cpp \
-            UnitTest++/src/TestReporterStdout.cpp \
-            UnitTest++/src/ReportAssert.cpp \
-            UnitTest++/src/TestList.cpp \
-            UnitTest++/src/TimeConstraint.cpp \
-            UnitTest++/src/TestDetails.cpp \
-            UnitTest++/src/MemoryOutStream.cpp \
-            UnitTest++/src/DeferredTestReporter.cpp \
-            UnitTest++/src/DeferredTestResult.cpp \
-            UnitTest++/src/XmlTestReporter.cpp \
-            UnitTest++/src/CurrentTest.cpp
+_test_src = deps/UnitTest++/src/AssertException.cpp \
+            deps/UnitTest++/src/Test.cpp \
+            deps/UnitTest++/src/Checks.cpp \
+            deps/UnitTest++/src/TestRunner.cpp \
+            deps/UnitTest++/src/TestResults.cpp \
+            deps/UnitTest++/src/TestReporter.cpp \
+            deps/UnitTest++/src/TestReporterStdout.cpp \
+            deps/UnitTest++/src/ReportAssert.cpp \
+            deps/UnitTest++/src/TestList.cpp \
+            deps/UnitTest++/src/TimeConstraint.cpp \
+            deps/UnitTest++/src/TestDetails.cpp \
+            deps/UnitTest++/src/MemoryOutStream.cpp \
+            deps/UnitTest++/src/DeferredTestReporter.cpp \
+            deps/UnitTest++/src/DeferredTestResult.cpp \
+            deps/UnitTest++/src/XmlTestReporter.cpp \
+            deps/UnitTest++/src/CurrentTest.cpp
 
 _lib_prog = tool/cli.cpp
 _test_prog = test/test.cpp
 
 ifeq ($(OS),Windows_NT)
-	_test_src += UnitTest++/src/Win32/TimeHelpers.cpp
+	_test_src += deps/UnitTest++/src/Win32/TimeHelpers.cpp
 else
-	_test_src += UnitTest++/src/Posix/TimeHelpers.cpp \
-	             UnitTest++/src/Posix/SignalTranslator.cpp
+	_test_src += deps/UnitTest++/src/Posix/TimeHelpers.cpp \
+	             deps/UnitTest++/src/Posix/SignalTranslator.cpp
 endif
 
 tool = sourcemap
@@ -56,10 +58,10 @@ ifeq ($(OS),Windows_NT)
 	tool = sourcemap.exe
 	test = testsuite.exe
 	testsuite = $(test)
-	lib_src = $(subst,/,\ $(_lib_src))
-	test_src = $(subst,/,\ $(_test_src))
-	lib_prog = $(subst,/,\ $(_lib_prog))
-	test_prog = $(subst,/,\ $(_test_prog))
+	lib_src = $(_lib_src)
+	test_src = $(_test_src)
+	lib_prog = $(_lib_prog)
+	test_prog = $(_test_prog)
 else
 	testsuite = ./$(test)
 	lib_src = $(_lib_src)
@@ -68,11 +70,17 @@ else
 	test_prog = $(_test_prog)
 endif
 
-lib_objects = $(lib_src:.cpp=.o)
-test_objects = $(test_src:.cpp=.o)
-testsuite_objects = $(test_prog:.cpp=.o)
+lib_objects_x = $(lib_src:.cpp=.o)
+lib_objects = $(lib_objects_x:.c=.o)
+test_objects_x = $(test_src:.cpp=.o)
+test_objects = $(test_objects_x:.c=.o)
+testsuite_objects_x = $(test_prog:.cpp=.o)
+testsuite_objects = $(testsuite_objects_x:.c=.o)
+
+CLEANUP_FILES = $(tool) $(test) $(lib_objects) $(test_objects) $(testsuite_objects)
 
 all: $(tool) $(test)
+	echo $(lib_src)
 
 tool: $(tool)
 test: $(test)
@@ -80,21 +88,22 @@ test: $(test)
 
 %.o: %.cpp
 	@echo compile $<
-	@$(CXX) $(CXXFLAGS) $(EXTRA_CFLAGS) -DVERSION="\"$(GIT_VERSION)\"" -c $< -o $@
+	$(CXX) -std=c++0x $(CXXFLAGS) $(EXTRA_CFLAGS) -DVERSION="\"$(GIT_VERSION)\"" -c $< -o $@
+
+%.o: %.c
+	@echo compile $<
+	$(CC) $(CXXFLAGS) $(EXTRA_CFLAGS) -DVERSION="\"$(GIT_VERSION)\"" -c $< -o $@
 
 $(tool): $(lib_prog) $(lib_objects)
 	@echo link $@
-	@$(CXX) $(CXXFLAGS) $(EXTRA_CFLAGS) -DVERSION="\"$(GIT_VERSION)\"" $(EXTRA_LDFLAGS) -o $(tool) $(lib_prog) $(lib_objects)
+	$(CXX) -std=c++0x  $(CXXFLAGS) $(EXTRA_CFLAGS) -DVERSION="\"$(GIT_VERSION)\"" $(EXTRA_LDFLAGS) -o $(tool) $(lib_prog) $(lib_objects)
 
 $(test): $(testsuite_objects) $(lib_objects) $(test_objects)
 	@echo link $@
-	@$(CXX) $(CXXFLAGS) $(EXTRA_CFLAGS) -DVERSION="\"$(GIT_VERSION)\"" $(EXTRA_LDFLAGS) -o $(test) $(testsuite_objects) $(lib_objects) $(test_objects)
+	@$(CXX) -std=c++0x  $(CXXFLAGS) $(EXTRA_CFLAGS) -DVERSION="\"$(GIT_VERSION)\"" $(EXTRA_LDFLAGS) -o $(test) $(testsuite_objects) $(lib_objects) $(test_objects)
 
 clean:
-	@$(RM) $(tool)
-	@$(RM) $(test)
-	@$(RM) $(lib_objects)
-	@$(RM) $(test_objects)
-	@$(RM) $(testsuite_objects)
+	@$(RM) "src\\*.o" "src\\format\\*.o" "deps\\json\\*.o" "deps\\UnitTest++\\src\\*.o" "deps\\cencode\\*.o"  "test\\*.o" "*.exe"
+	@$(RM) $(CLEANUP_FILES)
 
 .PHONY: clean test tool all

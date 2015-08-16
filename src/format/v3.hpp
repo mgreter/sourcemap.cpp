@@ -7,10 +7,8 @@
 #include <iostream>
 #include <algorithm>
 
-#include "../mapping.hpp"
-
-// using std::string
-using namespace std;
+#include "sourcemap.hpp"
+#include "mappings.hpp"
 
 // add namespace for c++
 namespace SourceMap
@@ -19,8 +17,8 @@ namespace SourceMap
 	{
 		namespace V3
 		{
-			const string serialize(const Mapping& map);
-			void unserialize(Mapping& map, const string& data);
+			const string serialize(const Mappings& map);
+			void unserialize(Mappings& map, const string& data);
 		}
 	}
 

@@ -1,14 +1,27 @@
 // include library
 #include <omp.h>
+#include <string>
+#include <istream>
+#include <ostream>
+#include <iostream>
+#include <fstream>
+#include <sstream>
 #include <stdexcept>
+#include <algorithm>
+
+#ifndef BUFFERSIZE
+#define BUFFERSIZE 1024
+#endif
 
 // our own header
-#include "sourcemap.h"
+#include "sourcemap.hpp"
+#include "document.hpp"
+#include "b64/decode.h"
 
 JsonNode* json_import(const char* str) {
-	if (string(str) == "null") { return json_mknull(); }
-	else if (string(str) == "true") { return json_mkbool(true); }
-	else if (string(str) == "false") { return json_mkbool(false); }
+	if (std::string(str) == "null") { return json_mknull(); }
+	else if (std::string(str) == "true") { return json_mkbool(true); }
+	else if (std::string(str) == "false") { return json_mkbool(false); }
 	else { return json_mkstring(str); }
 }
 
@@ -28,80 +41,160 @@ JsonNode* json_import(const char* str) {
           json_stringify(json_node, "")  \
   ))
 
-#define foreach(type, variable, array) \
-	vector<type>::iterator variable = array.begin(); \
-	vector<type>::iterator end_##variable = array.end(); \
-	for(; variable != end_##variable; ++variable)
-
-#define const_foreach(type, variable, const_array) \
-	vector<type>::const_iterator variable = const_array.begin(); \
-	vector<type>::const_iterator end_##variable = const_array.end(); \
-	for(; variable != end_##variable; ++variable)
-
-
-// using string
-using namespace std;
-
 // add namespace for c++
 namespace SourceMap
 {
 
-	SrcMap::SrcMap (const JsonNode& json_node)
+  std::istream& getline(std::istream& is, std::string& t)
+  {
+      t.clear();
+
+      // The characters in the stream are read one-by-one using a std::streambuf.
+      // That is faster than reading them one-by-one using the std::istream.
+      // Code that uses streambuf this way must be guarded by a sentry object.
+      // The sentry object performs various tasks,
+      // such as thread synchronization and updating the stream state.
+
+      std::istream::sentry se(is, true);
+      std::streambuf* sb = is.rdbuf();
+
+      for(;;) {
+          int c = sb->sbumpc();
+          switch (c) {
+          case '\n':
+              return is;
+          case '\r':
+              if(sb->sgetc() == '\n')
+                  sb->sbumpc();
+              return is;
+          case EOF:
+              // Also handle the case when the last line has no line ending
+              if(t.empty())
+                  is.setstate(std::ios::eofbit);
+              return is;
+          default:
+              t += (char)c;
+          }
+      }
+  }
+
+	SrcMapDoc::SrcMapDoc ()
+	{
+		this->map = make_shared<Mappings>();
+	}
+
+	SrcMapDoc::~SrcMapDoc ()
+	{ }
+
+	SrcMapDoc::SrcMapDoc (const JsonNode& json_node)
 	{
 		this->init(json_node);
 	}
 
-	SrcMap::SrcMap(const string& json_str)
+	bool match(const string& haystack, const string& needle, size_t& i)
+	{
+		size_t l = needle.length();
+		while (isspace(haystack[i])) ++i;
+		if (haystack.substr(i, l) == needle) {
+			i += l; return true;
+		}
+		return false;
+	}
+
+	SrcMapDoc::SrcMapDoc(const string& str)
 	{
 		// decode the json string first into a json_node
-		JsonNode* json_node = json_decode(json_str.c_str());
+		std::string line;
+		std::istringstream s(str);
+		while(std::getline(s, line))
+		{
+
+			size_t i = 0;
+			if (!match(line, "/*#", i)) continue;
+			if (!match(line, "sourceMappingURL", i)) continue;
+			if (!match(line, "=", i)) continue;
+			if (!match(line, "data", i)) continue;
+			if (!match(line, ":", i)) continue;
+			if (!match(line, "application/json", i)) continue;
+			if (!match(line, ";", i)) continue;
+			if (!match(line, "base64", i)) continue;
+			if (!match(line, ",", i)) continue;
+			while (isspace(line[i])) ++i;
+			size_t start = i;
+			while (line[i]) {
+				const char c = line[i];
+				if (c >= 'A' && c <= 'Z') { ++i; continue; }
+				if (c >= 'a' && c <= 'z') { ++i; continue; }
+				if (c >= '0' && c <= '9') { ++i; continue; }
+				if (c == '+' || c == '/') { ++i; continue; }
+				if (c == '=' || c == '=') { ++i; continue; }
+				break;
+			}
+			size_t stop = i;
+
+			string istr(line.substr(start, stop - start));
+			base64::decoder E;
+			istringstream istrm(istr);
+			stringstream ostrm;
+			E.decode(istrm, ostrm);
+			string ostr(ostrm.str());
+
+			JsonNode* json_node = json_decode(ostr.c_str());
+			if (!json_node) throw(runtime_error("invalid json_node"));
+			this->init(*json_node);
+			return;
+
+		}
+
+		JsonNode* json_node = json_decode(str.c_str());
 		if (!json_node) throw(runtime_error("invalid json_node"));
+
 		this->init(*json_node);
 	}
 
-	const Entry SrcMap::getEntry(size_t row, size_t idx) const
+	const ColMapSP SrcMapDoc::getColMap(size_t row, size_t idx) const
 	{
-		return map.getRow(row).getEntry(idx);
+		return map->getLineMap(row)->getColMap(idx);
 	}
-	const Entry SrcMap::getEntry(const SrcMapIdx& idx) const
+	const ColMapSP SrcMapDoc::getColMap(const SrcMapIdx& idx) const
 	{
-		return map.getRow(idx.row).getEntry(idx.idx);
+		return map->getLineMap(idx.row)->getColMap(idx.idx);
 	}
-	const vector<Entry> SrcMap::at(size_t row, size_t col) const
+	const vector<ColMapSP> SrcMapDoc::at(size_t row, size_t col) const
 	{
-		return map.getRow(row).at(col);
+		return map->getLineMap(row)->at(col);
 	}
-	const vector<Entry> SrcMap::at(const SrcMapPos& pos) const
+	const vector<ColMapSP> SrcMapDoc::at(const SrcMapPos& pos) const
 	{
-		return map.getRow(pos.row).at(pos.col);
+		return map->getLineMap(pos.row)->at(pos.col);
 	}
 
-	const string SrcMap::getFile() const { return file; }
-	const string SrcMap::getRoot() const { return root; }
-	const Mapping SrcMap::getMap() const { return map; }
+	const string SrcMapDoc::getFile() const { return file; }
+	const string SrcMapDoc::getRoot() const { return root; }
+	const MappingsSP SrcMapDoc::getMap() const { return map; }
 
-	const string SrcMap::getToken(size_t idx) const
+	const string SrcMapDoc::getToken(size_t idx) const
 	{
 		if (idx < 0 || idx >= tokens.size())
 		{ throw(runtime_error("token access out of bound")); }
 		return tokens[idx];
 	}
 
-	const string SrcMap::getSource(size_t idx) const
+	const string SrcMapDoc::getSource(size_t idx) const
 	{
 		if (idx < 0 || idx >= sources.size())
 		{ throw(runtime_error("source access out of bound")); }
 		return sources[idx];
 	}
 
-	const string SrcMap::getContent(size_t idx) const
+	const string SrcMapDoc::getContent(size_t idx) const
 	{
 		if (idx < 0 || idx >= contents.size())
 		{ throw(runtime_error("content access out of bound")); }
 		return contents[idx];
 	}
 
-	ostream& operator<<(ostream& os, const Entry& entry)
+	ostream& operator<<(ostream& os, const ColMap& entry)
 	{
 		if (entry.getType() == 1) {
 			return os << "[" << entry.col << "]";
@@ -117,10 +210,10 @@ namespace SourceMap
 		}
 	}
 
-	ostream& operator<<(ostream& os, const Mapping& map)
+	ostream& operator<<(ostream& os, const Mappings& map)
 	{
 		size_t count = 0; // count total number of entries
-		const_foreach(Row, row, map.rows) count += (*row).getLength();
+		const_foreach(LineMapSP, row, map.rows) count += (*row)->getLength();
 		return os << "{" << map.rows.size() << ":" << count << "}";
 	}
 
@@ -130,8 +223,9 @@ namespace SourceMap
 	}
 
 
-	void SrcMap::init (const JsonNode& json_cnode)
+	void SrcMapDoc::init (const JsonNode& json_cnode)
 	{
+
 
 		// remove constness ???!!
 		JsonNode json_node = json_cnode;
@@ -187,15 +281,15 @@ namespace SourceMap
 				}
 			}
 
-			map = Mapping(json_export(json_mappings));
+			map = SourceMap::make_shared<Mappings>(json_export(json_mappings));
 
-			map.last_ln_col = (int) json_double(json_lastLineLength);
+			map->last_ln_col = (int) json_double(json_lastLineLength);
 
 		}
 
 	}
 
-	char* SrcMap::serialize(bool enc) const
+	char* SrcMapDoc::serialize(bool enc) const
 	{
 
 		JsonNode* json_node = json_mkobject();
@@ -224,7 +318,7 @@ namespace SourceMap
 		}
 		json_append_member(json_node, "sourcesContent", json_contents);
 
-		string mappings = map.serialize();
+		string mappings = map->serialize();
 		JsonNode* json_mappings = json_import(mappings.c_str());
 		json_append_member(json_node, "mappings", json_mappings);
 
@@ -239,7 +333,7 @@ namespace SourceMap
 
 		// insert optional and custom attribute to store the last line length
 		// this information would otherwise be lost and is needed for appends etc.
-		json_append_member(json_node, "x_lastLineSize", json_mknumber(map.last_ln_col));
+		json_append_member(json_node, "x_lastLineSize", json_mknumber(map->last_ln_col));
 
 		// get string from json encode
 		// caller must free it himself
@@ -258,7 +352,7 @@ namespace SourceMap
 
 	// add sources from srcmap to our own
 	// update mappings from srcmap to new index
-	void SrcMap::mergePrepare(SrcMap srcmap)
+	void SrcMapDoc::mergePrepare(SrcMapDoc srcmap)
 	{
 
 		foreach(string, source, srcmap.sources) {
@@ -268,21 +362,28 @@ namespace SourceMap
 		size_t offset = sources.size();
 
 		if (true) {
-			const_foreach(Row, row, srcmap.map.rows) {
-				cerr << (*row).entries.size() << endl;
+			const_foreach(LineMapSP, row, srcmap.map->rows) {
+				cerr << (*row)->entries.size() << endl;
 			}
 		}
 
-		foreach(Row, row, srcmap.map.rows) {
-			foreach(Entry, entry, (*row).entries) {
-				if (entry->getType() > 0)
-					entry->src_idx += offset;
+		foreach(LineMapSP, row, srcmap.map->rows) {
+			foreach(ColMapSP, entry, (*row)->entries) {
+				if ((*entry)->getType() > 0)
+					(*entry)->src_idx += offset;
 			}
 		}
 
 	}
 
-	void SrcMap::remap(SrcMap srcmap)
+	void SrcMapDoc::append(LineMap row)
+	{
+	}
+	void SrcMapDoc::prepend(LineMap row)
+	{
+	}
+
+	void SrcMapDoc::remap(SrcMapDoc srcmap)
 	{
 
 		size_t i = 0;
@@ -296,16 +397,16 @@ namespace SourceMap
 			sources.push_back(*source);
 		}
 
-		foreach(Row, row, map.rows) {
-			foreach(Entry, entry, row->entries) {
+		foreach(LineMapSP, row, map->rows) {
+			foreach_ptr(ColMap, entry, (*row)->entries) {
 
 				if (entry->src_idx != 0) continue;
 
 				// our own source map can only be of one file
-				vector<Entry> originals = srcmap.map.rows[i].at(entry->getCol());
+				vector<ColMapSP> originals = srcmap.map->rows[i]->at(entry->getCol());
 
 				if (originals.size() >= 1) {
-					const_foreach(Entry, original, originals) {
+					const_foreach_ptr(ColMap, original, originals) {
 						if (entry->getType() > 0) {
 							entry->col = original->col;
 						}
@@ -322,7 +423,6 @@ namespace SourceMap
 			}
 			++i;
 		}
-
 		end = omp_get_wtime();
 
 		cerr << "Benchmark: " << (end - start) << endl;
@@ -334,32 +434,32 @@ namespace SourceMap
 	{
 		public:
 			adjust_col(int off) : offset(off) {}
-			void operator()(Entry &entry)
+			void operator()(ColMapSP entry)
 			{
-				entry.setCol(entry.getCol() + offset);
+				entry->setCol(entry->getCol() + offset);
 			}
 		private:
 			int offset;
 	};
 
-	void SrcMap::insert(SrcMapPos pos, const SrcMap& srcmap)
+	void SrcMapDoc::insert(SrcMapPos pos, const SrcMapDoc& srcmap)
 	{
 		// ToDo: adapt srcmap for insert
-		insert(pos, srcmap.map);
+		insert(pos, *srcmap.map);
 	}
 
 	// bread and butter function that implements all operations
-	void SrcMap::splice(SrcMapPos pos, SrcMapPos del, const SrcMap& srcmap)
+	void SrcMapDoc::splice(SrcMapPos pos, SrcMapPos del, const SrcMapDoc& srcmap)
 	{
 		// ToDo: adapt splice for insert
-		splice(pos, del, srcmap.map);
+		splice(pos, del, *srcmap.map);
 	}
 
 
 
 
 
-	void SrcMap::remove(SrcMapPos pos, SrcMapPos del)
+	void SrcMapDoc::remove(SrcMapPos pos, SrcMapPos del)
 	{
 
 		// some basic assertions to avoid strange bugs
@@ -367,20 +467,20 @@ namespace SourceMap
 		if (pos.row == string::npos) throw(invalid_argument("remove pos.row is invalid"));
 		if (del.col == string::npos) throw(invalid_argument("remove del.col is invalid"));
 		if (del.row == string::npos) throw(invalid_argument("remove del.row is invalid"));
-		if (map.getColCount() == string::npos) throw(invalid_argument("remove size.col is invalid"));
-		if (map.getRowCount() == string::npos) throw(invalid_argument("remove size.row is invalid"));
+		if (map->getLastRowSize() == string::npos) throw(invalid_argument("remove size.col is invalid"));
+		if (map->getRowCount() == string::npos) throw(invalid_argument("remove size.row is invalid"));
 		// check for access violations
-		if (map.rows.size() == 0) throw(runtime_error("empty srcmap"));
-		if (map.rows.size() <= pos.row) throw(out_of_range("access out of bound"));
-		if (map.rows.size() <= pos.row + del.row) throw(out_of_range("delete out of bound"));
+		if (map->rows.size() == 0) throw(runtime_error("empty srcmap"));
+		if (map->rows.size() <= pos.row) throw(out_of_range("access out of bound"));
+		if (map->rows.size() <= pos.row + del.row) throw(out_of_range("delete out of bound"));
 
 		// find the position where the remove should be placed
-		vector<Entry> &first_row = map.rows[pos.row].entries;
-		vector<Entry>::iterator pos_it = first_row.begin();
-		vector<Entry>::iterator first_row_end = first_row.end();
+		vector<ColMapSP> &first_row = map->rows[pos.row]->entries;
+		vector<ColMapSP>::iterator pos_it = first_row.begin();
+		vector<ColMapSP>::iterator first_row_end = first_row.end();
 		// loop until we reach the remove position
 		for(; pos_it != first_row_end; ++pos_it)
-		{ if (pos_it->col >= pos.col) break; }
+		{ if ((*pos_it)->col >= pos.col) break; }
 		// also get a numeric offset, since any
 		// insertion will invalidate all iterators
 		// size_t pos_idx = pos_it - first_row.begin();
@@ -390,12 +490,12 @@ namespace SourceMap
 			// erase everything after the pos.col
 			first_row.erase(pos_it, first_row_end);
 
-			vector<Entry> &last_row = map.rows[pos.row + del.row].entries;
-			vector<Entry>::iterator last_row_it = last_row.begin();
-			vector<Entry>::iterator last_row_end = last_row.end();
+			vector<ColMapSP> &last_row = map->rows[pos.row + del.row]->entries;
+			vector<ColMapSP>::iterator last_row_it = last_row.begin();
+			vector<ColMapSP>::iterator last_row_end = last_row.end();
 			// loop until we reach the remove position
 			for(; last_row_it != last_row_end; ++last_row_it)
-			{ if (last_row_it->col >= del.col) break; }
+			{ if ((*last_row_it)->col >= del.col) break; }
 
 			// adjust the remaining entries for the removed range
 			for_each(last_row_it, last_row.end(), adjust_col(- del.col));
@@ -411,17 +511,17 @@ namespace SourceMap
 
 			// remove full lines
 			// excluding the last
-			map.rows.erase(
-				map.rows.begin() + pos.row + 1,
-				map.rows.begin() + pos.row + 1 + del.row
+			map->rows.erase(
+				map->rows.begin() + pos.row + 1,
+				map->rows.begin() + pos.row + 1 + del.row
 			);
 
 		} else {
 
-			vector<Entry>::iterator remove_it = pos_it;
+			vector<ColMapSP>::iterator remove_it = pos_it;
 			// loop until we reach the remove position
 			for(; remove_it != first_row_end; ++remove_it)
-			{ if (remove_it->col >= pos.col + del.col) break; }
+			{ if ((*remove_it)->col >= pos.col + del.col) break; }
 			// adjust the remaining entries for the removed range
 			for_each(remove_it, first_row.end(), adjust_col(- del.col));
 			// remove the range we have found
@@ -431,32 +531,32 @@ namespace SourceMap
 
 		// sync the row size stat variable
 		// ToDo: use other way, too error prone
-		// map.size.row = map.rows.size();
+		// map->size.row = map->rows.size();
 
 	}
 	// EO remove
 
-	void SrcMap::insert(SrcMapPos pos, const Mapping& insert)
+	void SrcMapDoc::insert(SrcMapPos pos, const Mappings& insert)
 	{
 
 		// some basic assertions to avoid strange bugs
 		if (pos.col == string::npos) throw(invalid_argument("insert pos.col is invalid"));
 		if (pos.row == string::npos) throw(invalid_argument("insert pos.row is invalid"));
-		if (map.getColCount() == string::npos) throw(invalid_argument("remove size.col is invalid"));
-		if (map.getRowCount() == string::npos) throw(invalid_argument("remove size.row is invalid"));
-		if (insert.getColCount() == string::npos) throw(invalid_argument("insert insert.col is invalid"));
+		if (map->getLastRowSize() == string::npos) throw(invalid_argument("remove size.col is invalid"));
+		if (map->getRowCount() == string::npos) throw(invalid_argument("remove size.row is invalid"));
+		if (insert.getLastRowSize() == string::npos) throw(invalid_argument("insert insert.col is invalid"));
 		if (insert.getRowCount() == string::npos) throw(invalid_argument("insert insert.row is invalid"));
 		// check for access violations
-		if (map.rows.size() == 0) throw(runtime_error("empty srcmap"));
-		if (map.rows.size() <= pos.row) throw(out_of_range("access out of bound"));
+		if (map->rows.size() == 0) throw(runtime_error("empty srcmap"));
+		if (map->rows.size() <= pos.row) throw(out_of_range("access out of bound"));
 
 		// find the position where the insert should be placed
-		vector<Entry> &first_row = map.rows[pos.row].entries;
-		vector<Entry>::iterator insert_it = first_row.begin();
-		vector<Entry>::iterator first_row_end = first_row.end();
+		vector<ColMapSP> &first_row = map->rows[pos.row]->entries;
+		vector<ColMapSP>::iterator insert_it = first_row.begin();
+		vector<ColMapSP>::iterator first_row_end = first_row.end();
 		// loop until we reach the insert position
 		for(; insert_it != first_row_end; ++insert_it)
-		{ if (insert_it->col >= pos.col) break; }
+		{ if ((*insert_it)->col >= pos.col) break; }
 		// also get a numeric offset, since any
 		// insertion will invalidate all iterators
 		size_t ins_idx = insert_it - first_row.begin();
@@ -465,51 +565,51 @@ namespace SourceMap
 		if (insert.rows.size() > 1) {
 
 			// adjust trailing entries to account for new offset
-			for_each(insert_it, first_row_end, adjust_col(insert.getColCount() - pos.col));
+			for_each(insert_it, first_row_end, adjust_col(insert.getLastRowSize() - pos.col));
 
 			// insert all full lines
 			// excluding the first line
-			map.rows.insert(
-				map.rows.begin() + pos.row + 1,
+			map->rows.insert(
+				map->rows.begin() + pos.row + 1,
 				insert.rows.begin() + 1, insert.rows.end()
 			);
 
 			size_t ins_row = insert.getRowCount() - 1;
 			// move trailing entries from the first line of insert
 			// to the last line that has been inserted previously
-			map.rows[pos.row + ins_row].entries.insert(
-				map.rows[pos.row + ins_row].entries.end(),
-				map.rows[pos.row].entries.begin() + ins_idx,
-				map.rows[pos.row].entries.end()
+			map->rows[pos.row + ins_row]->entries.insert(
+				map->rows[pos.row + ins_row]->entries.end(),
+				map->rows[pos.row]->entries.begin() + ins_idx,
+				map->rows[pos.row]->entries.end()
 			);
 
 			// get position to up we will remove the items later
 			// we do not remove them right away, as we possibly have
 			// the same vector in map and insert. Therefore we first
 			// want to make the copy before removing the entries!
-			size_t del_stop_idx = map.rows[pos.row].entries.size();
+			size_t del_stop_idx = map->rows[pos.row]->entries.size();
 
 			// copy entries of first line to be inserted
 			// they go the the end of the first insert line
-			map.rows[pos.row].entries.insert(
-				map.rows[pos.row].entries.end(),
-				insert.rows[0].entries.begin(),
-				insert.rows[0].entries.end()
+			map->rows[pos.row]->entries.insert(
+				map->rows[pos.row]->entries.end(),
+				insert.rows[0]->entries.begin(),
+				insert.rows[0]->entries.end()
 			);
 
 			// remove entries that have been moved
-			map.rows[pos.row].entries.erase(
-				map.rows[pos.row].entries.begin() + ins_idx,
-				map.rows[pos.row].entries.begin() + del_stop_idx
+			map->rows[pos.row]->entries.erase(
+				map->rows[pos.row]->entries.begin() + ins_idx,
+				map->rows[pos.row]->entries.begin() + del_stop_idx
 			);
 
 		// operate on existing row
 		} else if (insert.rows.size() == 1) {
 
 			// operation is only done on one single line
-			vector<Entry> insert_row = insert.rows[0].entries;
+			vector<ColMapSP> insert_row = insert.rows[0]->entries;
 			// adjust the offset to account for inserted data
-			for_each(insert_it, first_row_end, adjust_col(insert.getColCount()));
+			for_each(insert_it, first_row_end, adjust_col(insert.getLastRowSize()));
 			// then copy the complete first line to be inserted
 			first_row.insert(insert_it, insert_row.begin(), insert_row.end());
 			// restore the iterator after insertion
@@ -525,13 +625,13 @@ namespace SourceMap
 
 		// sync the row size stat variable
 		// ToDo: use other way, too error prone
-		// map.size.row = map.rows.size();
+		// map->size.row = map->rows.size();
 
 	}
 	// EO insert
 
 	// bread and butter function that implements all operations
-	void SrcMap::splice(SrcMapPos pos, SrcMapPos del, const Mapping& map)
+	void SrcMapDoc::splice(SrcMapPos pos, SrcMapPos del, const Mappings& map)
 	{
 
 		remove(pos, del);
@@ -539,30 +639,30 @@ namespace SourceMap
 
 	}
 
-	void SrcMap::addSource(string file)
+	void SrcMapDoc::addSource(string file)
 	{
 		sources.push_back(file);
 	}
-	void SrcMap::addToken(string token)
+	void SrcMapDoc::addToken(string token)
 	{
 		tokens.push_back(token);
 	}
 
 	// insert an entry at the given position
-	void SrcMap::insert(size_t row, Entry entry, bool after)
+	void SrcMapDoc::insert(size_t row, ColMapSP entry, bool after)
 	{
 		// make sure we have enough room (needed for lookup)
-		while (map.rows.size() <= row) { map.addNewLine(); }
+		while (map->rows.size() <= row) { map->addNewLine(); }
 		// create position object to pass as argument
-		SrcMapPos pos = SrcMapPos(row, entry.getCol() + after);
+		SrcMapPos pos = SrcMapPos(row, entry->getCol() + after);
 		// get entries object from row to work on
-		vector<Entry> &entries = map.rows[pos.row].entries;
+		vector<ColMapSP> &entries = map->rows[pos.row]->entries;
 		// find the position where the insert should be placed
-		vector<Entry>::iterator entry_it = entries.begin();
-		vector<Entry>::iterator entry_end = entries.end();
+		vector<ColMapSP>::iterator entry_it = entries.begin();
+		vector<ColMapSP>::iterator entry_end = entries.end();
 		// loop until we have found the position
 		for(; entry_it != entry_end; ++entry_it)
-		{ if (entry_it->col >= pos.col) break; }
+		{ if ((*entry_it)->col >= pos.col) break; }
 		// insert at end if no position found
 		entries.insert(entry_it, entry);
 	}
@@ -571,9 +671,9 @@ namespace SourceMap
 
 
 
-	void SrcMap::setLastLineLength(size_t col)
+	void SrcMapDoc::setLastLineLength(size_t col)
 	{
-		map.last_ln_col = col;
+		map->last_ln_col = col;
 	}
 
 

@@ -2,7 +2,7 @@
 
 #include <iostream>
 #include <stdexcept>
-#include "sourcemap.h"
+#include "document.hpp"
 #include "UnitTest++.h"
 #include "ReportAssert.h"
 
@@ -11,7 +11,7 @@ using namespace SourceMap;
 SUITE(Basic)
 {
 
-	SrcMap* srcmap = new SrcMap();
+	SrcMapDocSP srcmap = make_shared<SrcMapDoc>();
 
 	TEST(SrcMapPosInit)
 	{
@@ -121,212 +121,230 @@ SUITE(Basic)
 		CHECK_EQUAL(size_t(1), srcmap->getTokenSize());
 	}
 
+	void testMe(MappingsSP map)
+	{
+			LineMapSP rowA = map->getLineMap(0);
+	}
+
+	TEST(SomeTest)
+	{
+		MappingsSP map = make_shared<Mappings>();
+		map->addNewLine(1);
+		{
+			LineMapSP rowA = map->getLineMap(0);
+			rowA = map->getLineMap(0);
+			std::cerr << "#########\n";
+			rowA = map->getLineMap(0);
+		}
+		LineMapSP rowB = map->getLineMap(0);
+	}
+
 	TEST(InsertEntry)
 	{
-		srcmap->insert(0, Entry(0, 0, 0, 1, 0));
-		Entry entry = srcmap->getEntry(0, 0);
+		srcmap->insert(0, make_shared<ColMap>(0, 0, 0, 1, 0));
+		ColMapSP entry = srcmap->getColMap(0, 0);
 		srcmap->setLastLineLength(0);
-		CHECK_EQUAL(size_t(0), entry.getCol());
-		CHECK_EQUAL(size_t(0), entry.getToken());
-		CHECK_EQUAL(size_t(0), entry.getSrcLine());
-		CHECK_EQUAL(size_t(1), entry.getSrcCol());
-		CHECK_EQUAL(size_t(0), entry.getToken());
+		CHECK_EQUAL(size_t(0), entry->getCol());
+		CHECK_EQUAL(size_t(0), entry->getToken());
+		CHECK_EQUAL(size_t(0), entry->getSrcLine());
+		CHECK_EQUAL(size_t(1), entry->getSrcCol());
+		CHECK_EQUAL(size_t(0), entry->getToken());
 	}
 
 	TEST(SpliceInsert01)
 	{
 
-		SrcMap* insert = new SrcMap();
+		SrcMapDocSP insert = make_shared<SrcMapDoc>();
 		insert->addSource("src.css");
 		insert->addToken("token");
-		insert->insert(0, Entry(1, 0, 0, 2, 0));
+		insert->insert(0, make_shared<ColMap>(1, 0, 0, 2, 0));
 		insert->setLastLineLength(2);
 
 		srcmap->insert(SrcMapPos(0, 0), *insert);
 
-		CHECK_EQUAL(size_t(1), srcmap->map.getRowCount());
-		CHECK_EQUAL(size_t(2), srcmap->map.getRow(0).getLength());
+		CHECK_EQUAL(size_t(1), srcmap->map->getRowCount());
+		CHECK_EQUAL(size_t(2), srcmap->map->getLineMap(0)->getLength());
 
-		Entry entry1 = srcmap->getEntry(0, 0);
-		CHECK_EQUAL(size_t(1), entry1.getCol());
-		CHECK_EQUAL(size_t(0), entry1.getToken());
-		CHECK_EQUAL(size_t(0), entry1.getSrcLine());
-		CHECK_EQUAL(size_t(2), entry1.getSrcCol());
-		CHECK_EQUAL(size_t(0), entry1.getToken());
+		ColMapSP entry1 = srcmap->getColMap(0, 0);
+		CHECK_EQUAL(size_t(1), entry1->getCol());
+		CHECK_EQUAL(size_t(0), entry1->getToken());
+		CHECK_EQUAL(size_t(0), entry1->getSrcLine());
+		CHECK_EQUAL(size_t(2), entry1->getSrcCol());
+		CHECK_EQUAL(size_t(0), entry1->getToken());
 
-		Entry entry2 = srcmap->getEntry(0, 1);
-		CHECK_EQUAL(size_t(2), entry2.getCol());
-		CHECK_EQUAL(size_t(0), entry2.getToken());
-		CHECK_EQUAL(size_t(0), entry2.getSrcLine());
-		CHECK_EQUAL(size_t(1), entry2.getSrcCol());
-		CHECK_EQUAL(size_t(0), entry2.getToken());
+		ColMapSP entry2 = srcmap->getColMap(0, 1);
+		CHECK_EQUAL(size_t(2), entry2->getCol());
+		CHECK_EQUAL(size_t(0), entry2->getToken());
+		CHECK_EQUAL(size_t(0), entry2->getSrcLine());
+		CHECK_EQUAL(size_t(1), entry2->getSrcCol());
+		CHECK_EQUAL(size_t(0), entry2->getToken());
 
 	}
 
 	TEST(SpliceInsert02)
 	{
 
-		SrcMap* insert = new SrcMap();
+		SrcMapDocSP insert = make_shared<SrcMapDoc>();
 		insert->addSource("src.css");
 		insert->addToken("token");
-		insert->insert(0, Entry(0, 0, 0, 3, 0));
+		insert->insert(0, make_shared<ColMap>(0, 0, 0, 3, 0));
 		insert->setLastLineLength(3);
 		srcmap->insert(SrcMapPos(0, 1), *insert);
 
-		CHECK_EQUAL(size_t(1), srcmap->map.getRowCount());
-		CHECK_EQUAL(size_t(3), srcmap->map.getRow(0).getLength());
+		CHECK_EQUAL(size_t(1), srcmap->map->getRowCount());
+		CHECK_EQUAL(size_t(3), srcmap->map->getLineMap(0)->getLength());
 
 		// check that we did not modify insert
-		Entry entry1 = insert->getEntry(0, 0);
-		CHECK_EQUAL(size_t(0), entry1.getCol());
-		CHECK_EQUAL(size_t(0), entry1.getToken());
-		CHECK_EQUAL(size_t(0), entry1.getSrcLine());
-		CHECK_EQUAL(size_t(3), entry1.getSrcCol());
-		CHECK_EQUAL(size_t(0), entry1.getToken());
+		ColMapSP entry1 = insert->getColMap(0, 0);
+		CHECK_EQUAL(size_t(1), entry1->getCol());
+		CHECK_EQUAL(size_t(0), entry1->getToken());
+		CHECK_EQUAL(size_t(0), entry1->getSrcLine());
+		CHECK_EQUAL(size_t(3), entry1->getSrcCol());
+		CHECK_EQUAL(size_t(0), entry1->getToken());
 
-		Entry entry3 = srcmap->getEntry(0, 0);
-		CHECK_EQUAL(size_t(1), entry3.getCol());
-		CHECK_EQUAL(size_t(0), entry3.getToken());
-		CHECK_EQUAL(size_t(0), entry3.getSrcLine());
-		CHECK_EQUAL(size_t(3), entry3.getSrcCol());
-		CHECK_EQUAL(size_t(0), entry3.getToken());
+		ColMapSP entry3 = srcmap->getColMap(0, 0);
+		CHECK_EQUAL(size_t(1), entry3->getCol());
+		CHECK_EQUAL(size_t(0), entry3->getToken());
+		CHECK_EQUAL(size_t(0), entry3->getSrcLine());
+		CHECK_EQUAL(size_t(3), entry3->getSrcCol());
+		CHECK_EQUAL(size_t(0), entry3->getToken());
 
-		Entry entry4 = srcmap->getEntry(0, 1);
-		CHECK_EQUAL(size_t(4), entry4.getCol());
-		CHECK_EQUAL(size_t(0), entry4.getToken());
-		CHECK_EQUAL(size_t(0), entry4.getSrcLine());
-		CHECK_EQUAL(size_t(2), entry4.getSrcCol());
-		CHECK_EQUAL(size_t(0), entry4.getToken());
+		ColMapSP entry4 = srcmap->getColMap(0, 1);
+		CHECK_EQUAL(size_t(4), entry4->getCol());
+		CHECK_EQUAL(size_t(0), entry4->getToken());
+		CHECK_EQUAL(size_t(0), entry4->getSrcLine());
+		CHECK_EQUAL(size_t(2), entry4->getSrcCol());
+		CHECK_EQUAL(size_t(0), entry4->getToken());
 
-		Entry entry5 = srcmap->getEntry(0, 2);
-		CHECK_EQUAL(size_t(5), entry5.getCol());
-		CHECK_EQUAL(size_t(0), entry5.getToken());
-		CHECK_EQUAL(size_t(0), entry5.getSrcLine());
-		CHECK_EQUAL(size_t(1), entry5.getSrcCol());
-		CHECK_EQUAL(size_t(0), entry5.getToken());
+		ColMapSP entry5 = srcmap->getColMap(0, 2);
+		CHECK_EQUAL(size_t(5), entry5->getCol());
+		CHECK_EQUAL(size_t(0), entry5->getToken());
+		CHECK_EQUAL(size_t(0), entry5->getSrcLine());
+		CHECK_EQUAL(size_t(1), entry5->getSrcCol());
+		CHECK_EQUAL(size_t(0), entry5->getToken());
 
 		// check that we did not modify insert
-		Entry entry2 = insert->getEntry(0, 0);
-		CHECK_EQUAL(size_t(0), entry2.getCol());
-		CHECK_EQUAL(size_t(0), entry2.getToken());
-		CHECK_EQUAL(size_t(0), entry2.getSrcLine());
-		CHECK_EQUAL(size_t(3), entry2.getSrcCol());
-		CHECK_EQUAL(size_t(0), entry2.getToken());
+		ColMapSP entry2 = insert->getColMap(0, 0);
+		CHECK_EQUAL(size_t(1), entry2->getCol());
+		CHECK_EQUAL(size_t(0), entry2->getToken());
+		CHECK_EQUAL(size_t(0), entry2->getSrcLine());
+		CHECK_EQUAL(size_t(3), entry2->getSrcCol());
+		CHECK_EQUAL(size_t(0), entry2->getToken());
 
 	}
 
 	TEST(SpliceInsert03)
 	{
 
-		SrcMap* insert = new SrcMap();
+		SrcMapDocSP insert = make_shared<SrcMapDoc>();
 		insert->addSource("src.css");
 		insert->addToken("token");
-		insert->map.addNewLine();
+		insert->map->addNewLine();
 		insert->setLastLineLength(1);
 		srcmap->insert(SrcMapPos(0, 2), *insert);
 
-		CHECK_EQUAL(size_t(2), srcmap->map.getRowCount());
-		CHECK_EQUAL(size_t(1), srcmap->map.getRow(0).getLength());
-		CHECK_EQUAL(size_t(2), srcmap->map.getRow(1).getLength());
+		CHECK_EQUAL(size_t(2), srcmap->map->getRowCount());
+		CHECK_EQUAL(size_t(1), srcmap->map->getLineMap(0)->getLength());
+		CHECK_EQUAL(size_t(2), srcmap->map->getLineMap(1)->getLength());
 
-		Entry entry3 = srcmap->getEntry(0, 0);
-		CHECK_EQUAL(size_t(1), entry3.getCol());
-		CHECK_EQUAL(size_t(0), entry3.getToken());
-		CHECK_EQUAL(size_t(0), entry3.getSrcLine());
-		CHECK_EQUAL(size_t(3), entry3.getSrcCol());
-		CHECK_EQUAL(size_t(0), entry3.getToken());
+		ColMapSP entry3 = srcmap->getColMap(0, 0);
+		CHECK_EQUAL(size_t(1), entry3->getCol());
+		CHECK_EQUAL(size_t(0), entry3->getToken());
+		CHECK_EQUAL(size_t(0), entry3->getSrcLine());
+		CHECK_EQUAL(size_t(3), entry3->getSrcCol());
+		CHECK_EQUAL(size_t(0), entry3->getToken());
 
-		Entry entry4 = srcmap->getEntry(1, 0);
-		CHECK_EQUAL(size_t(3), entry4.getCol());
-		CHECK_EQUAL(size_t(0), entry4.getToken());
-		CHECK_EQUAL(size_t(0), entry4.getSrcLine());
-		CHECK_EQUAL(size_t(2), entry4.getSrcCol());
-		CHECK_EQUAL(size_t(0), entry4.getToken());
+		ColMapSP entry4 = srcmap->getColMap(1, 0);
+		CHECK_EQUAL(size_t(3), entry4->getCol());
+		CHECK_EQUAL(size_t(0), entry4->getToken());
+		CHECK_EQUAL(size_t(0), entry4->getSrcLine());
+		CHECK_EQUAL(size_t(2), entry4->getSrcCol());
+		CHECK_EQUAL(size_t(0), entry4->getToken());
 
-		Entry entry5 = srcmap->getEntry(1, 1);
-		CHECK_EQUAL(size_t(4), entry5.getCol());
-		CHECK_EQUAL(size_t(0), entry5.getToken());
-		CHECK_EQUAL(size_t(0), entry5.getSrcLine());
-		CHECK_EQUAL(size_t(1), entry5.getSrcCol());
-		CHECK_EQUAL(size_t(0), entry5.getToken());
+		ColMapSP entry5 = srcmap->getColMap(1, 1);
+		CHECK_EQUAL(size_t(4), entry5->getCol());
+		CHECK_EQUAL(size_t(0), entry5->getToken());
+		CHECK_EQUAL(size_t(0), entry5->getSrcLine());
+		CHECK_EQUAL(size_t(1), entry5->getSrcCol());
+		CHECK_EQUAL(size_t(0), entry5->getToken());
 
 	}
 
 	TEST(SpliceDelete01)
 	{
 
-		CHECK_EQUAL(size_t(2), srcmap->map.getRowCount());
+		CHECK_EQUAL(size_t(2), srcmap->map->getRowCount());
 		srcmap->remove(SrcMapPos(0, 0), SrcMapPos(0, 1));
-		CHECK_EQUAL(size_t(2), srcmap->map.getRowCount());
-		CHECK_EQUAL(size_t(1), srcmap->map.getRow(0).getLength());
-		CHECK_EQUAL(size_t(2), srcmap->map.getRow(1).getLength());
+		CHECK_EQUAL(size_t(2), srcmap->map->getRowCount());
+		CHECK_EQUAL(size_t(1), srcmap->map->getLineMap(0)->getLength());
+		CHECK_EQUAL(size_t(2), srcmap->map->getLineMap(1)->getLength());
 
-		Entry entry3 = srcmap->getEntry(0, 0);
-		CHECK_EQUAL(size_t(0), entry3.getCol());
-		CHECK_EQUAL(size_t(0), entry3.getToken());
-		CHECK_EQUAL(size_t(0), entry3.getSrcLine());
-		CHECK_EQUAL(size_t(3), entry3.getSrcCol());
-		CHECK_EQUAL(size_t(0), entry3.getToken());
+		ColMapSP entry3 = srcmap->getColMap(0, 0);
+		CHECK_EQUAL(size_t(0), entry3->getCol());
+		CHECK_EQUAL(size_t(0), entry3->getToken());
+		CHECK_EQUAL(size_t(0), entry3->getSrcLine());
+		CHECK_EQUAL(size_t(3), entry3->getSrcCol());
+		CHECK_EQUAL(size_t(0), entry3->getToken());
 
 	}
 
 	TEST(SpliceDelete02)
 	{
 
-		CHECK_EQUAL(size_t(2), srcmap->map.getRowCount());
+		CHECK_EQUAL(size_t(2), srcmap->map->getRowCount());
 		srcmap->remove(SrcMapPos(0, 0), SrcMapPos(0, 1));
-		CHECK_EQUAL(size_t(2), srcmap->map.getRowCount());
-		CHECK_EQUAL(size_t(0), srcmap->map.getRow(0).getLength());
-		CHECK_EQUAL(size_t(2), srcmap->map.getRow(1).getLength());
+		CHECK_EQUAL(size_t(2), srcmap->map->getRowCount());
+		CHECK_EQUAL(size_t(0), srcmap->map->getLineMap(0)->getLength());
+		CHECK_EQUAL(size_t(2), srcmap->map->getLineMap(1)->getLength());
 
-		Entry entry4 = srcmap->getEntry(1, 0);
-		CHECK_EQUAL(size_t(3), entry4.getCol());
-		CHECK_EQUAL(size_t(0), entry4.getToken());
-		CHECK_EQUAL(size_t(0), entry4.getSrcLine());
-		CHECK_EQUAL(size_t(2), entry4.getSrcCol());
-		CHECK_EQUAL(size_t(0), entry4.getToken());
+		ColMapSP entry4 = srcmap->getColMap(1, 0);
+		CHECK_EQUAL(size_t(3), entry4->getCol());
+		CHECK_EQUAL(size_t(0), entry4->getToken());
+		CHECK_EQUAL(size_t(0), entry4->getSrcLine());
+		CHECK_EQUAL(size_t(2), entry4->getSrcCol());
+		CHECK_EQUAL(size_t(0), entry4->getToken());
 
-		Entry entry5 = srcmap->getEntry(1, 1);
-		CHECK_EQUAL(size_t(4), entry5.getCol());
-		CHECK_EQUAL(size_t(0), entry5.getToken());
-		CHECK_EQUAL(size_t(0), entry5.getSrcLine());
-		CHECK_EQUAL(size_t(1), entry5.getSrcCol());
-		CHECK_EQUAL(size_t(0), entry5.getToken());
+		ColMapSP entry5 = srcmap->getColMap(1, 1);
+		CHECK_EQUAL(size_t(4), entry5->getCol());
+		CHECK_EQUAL(size_t(0), entry5->getToken());
+		CHECK_EQUAL(size_t(0), entry5->getSrcLine());
+		CHECK_EQUAL(size_t(1), entry5->getSrcCol());
+		CHECK_EQUAL(size_t(0), entry5->getToken());
 
 	}
 
 	TEST(SpliceDelete03)
 	{
 
-		CHECK_EQUAL(size_t(2), srcmap->map.getRowCount());
+		CHECK_EQUAL(size_t(2), srcmap->map->getRowCount());
 		srcmap->remove(SrcMapPos(1, 3), SrcMapPos(0, 1));
-		CHECK_EQUAL(size_t(2), srcmap->map.getRowCount());
-		CHECK_EQUAL(size_t(0), srcmap->map.getRow(0).getLength());
-		CHECK_EQUAL(size_t(1), srcmap->map.getRow(1).getLength());
+		CHECK_EQUAL(size_t(2), srcmap->map->getRowCount());
+		CHECK_EQUAL(size_t(0), srcmap->map->getLineMap(0)->getLength());
+		CHECK_EQUAL(size_t(1), srcmap->map->getLineMap(1)->getLength());
 
-		Entry entry4 = srcmap->getEntry(1, 0);
-		CHECK_EQUAL(size_t(3), entry4.getCol());
-		CHECK_EQUAL(size_t(0), entry4.getToken());
-		CHECK_EQUAL(size_t(0), entry4.getSrcLine());
-		CHECK_EQUAL(size_t(1), entry4.getSrcCol());
-		CHECK_EQUAL(size_t(0), entry4.getToken());
+		ColMapSP entry4 = srcmap->getColMap(1, 0);
+		CHECK_EQUAL(size_t(3), entry4->getCol());
+		CHECK_EQUAL(size_t(0), entry4->getToken());
+		CHECK_EQUAL(size_t(0), entry4->getSrcLine());
+		CHECK_EQUAL(size_t(1), entry4->getSrcCol());
+		CHECK_EQUAL(size_t(0), entry4->getToken());
 
 	}
 
 	TEST(SpliceDelete04)
 	{
 
-		CHECK_EQUAL(size_t(2), srcmap->map.getRowCount());
+		CHECK_EQUAL(size_t(2), srcmap->map->getRowCount());
 		srcmap->remove(SrcMapPos(0, 1), SrcMapPos(1, 2));
-		CHECK_EQUAL(size_t(1), srcmap->map.getRowCount());
-		CHECK_EQUAL(size_t(1), srcmap->map.getRow(0).getLength());
+		CHECK_EQUAL(size_t(1), srcmap->map->getRowCount());
+		CHECK_EQUAL(size_t(1), srcmap->map->getLineMap(0)->getLength());
 
-		Entry entry4 = srcmap->getEntry(0, 0);
-		CHECK_EQUAL(size_t(1), entry4.getCol());
-		CHECK_EQUAL(size_t(0), entry4.getToken());
-		CHECK_EQUAL(size_t(0), entry4.getSrcLine());
-		CHECK_EQUAL(size_t(1), entry4.getSrcCol());
-		CHECK_EQUAL(size_t(0), entry4.getToken());
+		ColMapSP entry4 = srcmap->getColMap(0, 0);
+		CHECK_EQUAL(size_t(1), entry4->getCol());
+		CHECK_EQUAL(size_t(0), entry4->getToken());
+		CHECK_EQUAL(size_t(0), entry4->getSrcLine());
+		CHECK_EQUAL(size_t(1), entry4->getSrcCol());
+		CHECK_EQUAL(size_t(0), entry4->getToken());
 
 	}
 

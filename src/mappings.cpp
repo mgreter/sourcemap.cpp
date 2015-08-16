@@ -1,38 +1,39 @@
 // include library
 #include <omp.h>
+#include <algorithm>
 #include <stdexcept>
 
-#include "mapping.hpp"
+#include "mappings.hpp"
 #include "format/v3.hpp"
-
-// using string
-using namespace std;
 
 // add namespace for c++
 namespace SourceMap
 {
 
-	Mapping::Mapping(size_t version)
+	Mappings::Mappings(size_t version)
 	{
 		this->version = version;
-		this->addNewLine();
+		this->addNewLine(0);
 		this->last_ln_col = 0;
 	}
 
-	Mapping::Mapping(string VLQ, size_t version)
+	Mappings::Mappings(string VLQ, size_t version)
 	{
 		this->version = version;
-		this->addNewLine();
+		this->addNewLine(0);
 		this->last_ln_col = 0;
 		this->init(VLQ);
 	}
 
-	const Row Mapping::getRow(size_t idx) const {
+	Mappings::~Mappings()
+	{ }
+
+	const LineMapSP Mappings::getLineMap(size_t idx) const {
 		if (idx >= 0 && idx < rows.size()) return rows[idx];
 		else throw(invalid_argument("out of bound"));
 	}
 
-	const string Mapping::serialize() const
+	const string Mappings::serialize() const
 	{
 		if (this->version == 3) {
 			return SourceMap::Format::V3::serialize(*this);
@@ -41,7 +42,7 @@ namespace SourceMap
 		}
 	}
 
-	void Mapping::init(const string& str)
+	void Mappings::init(const string& str)
 	{
 		if (this->version == 3) {
 			SourceMap::Format::V3::unserialize(*this, str);
@@ -50,9 +51,10 @@ namespace SourceMap
 		}
 	}
 
-	void Mapping::addNewLine()
+	void Mappings::addNewLine(const size_t len)
 	{
-		rows.push_back(Row());
+		rows.push_back(make_shared<LineMap>());
+		this->last_ln_col = 0;
 	}
 
 

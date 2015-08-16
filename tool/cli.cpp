@@ -7,7 +7,7 @@
 #include <iostream>
 #include <stdlib.h>
 
-#include "sourcemap.h"
+#include "document.hpp"
 
 // using std::string
 using namespace std;
@@ -104,7 +104,7 @@ int main (int argc, char** argv)
 	try
 	{
 
-		SrcMap srcmap(data);
+		SrcMapDoc srcmap(data);
 
 		if (remap_map)
 		{
@@ -112,7 +112,8 @@ int main (int argc, char** argv)
 			cerr << "srcmap: " << srcmap.getMap() << endl;
 			srcmap.remap(srcmap);
 			cerr << "srcmap: " << srcmap.getMap() << endl;
-			SrcMap qwe = srcmap;
+			SrcMapDoc qwe = srcmap;
+			qwe.map->setLastRowSize(0);
 			srcmap.splice(SrcMapPos(0, 0), SrcMapPos(0, 0), qwe);
 			cerr << "srcmap: " << srcmap.getMap() << endl;
 
@@ -122,21 +123,21 @@ int main (int argc, char** argv)
 		if (debug_map)
 		{
 
-			Mapping map = srcmap.getMap();
+			MappingsSP map = srcmap.getMap();
 
 			cout << "file: " << srcmap.getFile() << endl;
 			cout << "root: " << srcmap.getRoot() << endl;
 
-			for(size_t i = 0; i < map.getRowCount(); i++) {
-				const Row& row = map.getRow(i);
-				for(size_t n = 0; n < row.getEntryCount(); n++) {
-					Entry entry = row.getEntry(n);
-					if (entry.getType() == 1) {
-						cout << entry.getCol() << endl;
-					} else if (entry.getType() == 4) {
-						cout << entry.getCol() << ":" << entry.getSource() << "=" << srcmap.getSource(entry.getSource()) << "|" << entry.getSource() << ":" << entry.getSrcLine() << ":" << entry.getSrcCol() << ":" << endl;
-					} else if (entry.getType() == 5) {
-						cout << entry.getCol() << ":" << entry.getSource() << "=" << srcmap.getSource(entry.getSource()) << ":" << entry.getSrcLine() << ":" << entry.getSrcCol() << ":" << entry.getToken() << "=" << srcmap.getToken(entry.getToken()) << endl;
+			for(size_t i = 0; i < map->getRowCount(); i++) {
+				const LineMapSP row = map->getLineMap(i);
+				for(size_t n = 0; n < row->getEntryCount(); n++) {
+					ColMapSP entry = row->getColMap(n);
+					if (entry->getType() == 1) {
+						cout << entry->getCol() << endl;
+					} else if (entry->getType() == 4) {
+						cout << entry->getCol() << ":" << entry->getSource() << "=" << srcmap.getSource(entry->getSource()) << "|" << entry->getSource() << ":" << entry->getSrcLine() << ":" << entry->getSrcCol() << ":" << endl;
+					} else if (entry->getType() == 5) {
+						cout << entry->getCol() << ":" << entry->getSource() << "=" << srcmap.getSource(entry->getSource()) << ":" << entry->getSrcLine() << ":" << entry->getSrcCol() << ":" << entry->getToken() << "=" << srcmap.getToken(entry->getToken()) << endl;
 					}
 				}
 			}
@@ -151,7 +152,7 @@ int main (int argc, char** argv)
 		{
 
 			JsonNode* json_a = json_decode(data.c_str());
-			string json = (new SrcMap(data))->serialize();
+			string json = (new SrcMapDoc(data))->serialize();
 			JsonNode* json_b = json_decode(json.c_str());
 
 			// check if we have the same information

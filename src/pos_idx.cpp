@@ -1,11 +1,8 @@
 // include library
-#include <omp.h>
+#include <algorithm>
 #include <stdexcept>
 
-#include "index.hpp"
-
-// using string
-using namespace std;
+#include "pos_idx.hpp"
 
 // add namespace for c++
 namespace SourceMap

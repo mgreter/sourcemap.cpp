@@ -3,9 +3,6 @@
 
 #include "v3.hpp"
 
-// using string
-using namespace std;
-
 // add namespace for c++
 namespace SourceMap
 {
@@ -111,7 +108,7 @@ namespace SourceMap
 				return fromVLQSigned(result);
 			}
 
-			const string serialize(const Mapping& map)
+			const string serialize(const Mappings& map)
 			{
 
 				string result = "";
@@ -123,34 +120,34 @@ namespace SourceMap
 				size_t token = 0;
 
 				for(size_t i = 0; i < map.getRowCount(); ++i) {
-					Row row = map.rows[i];
-					for(size_t n = 0; n < row.getEntryCount(); ++n) {
-						Entry entry = row.getEntry(n);
-						if (entry.getType() == 1) {
-							result += encodeVLQ(entry.getCol() - column);
-							source = entry.getCol();
-						} else if (entry.getType() == 4) {
-							result += encodeVLQ(entry.getCol() - column);
-							result += encodeVLQ(entry.getSource() - source);
-							result += encodeVLQ(entry.getSrcLine() - in_line);
-							result += encodeVLQ(entry.getSrcCol() - in_col);
-							column = entry.getCol();
-							source = entry.getSource();
-							in_line = entry.getSrcLine();
-							in_col = entry.getSrcCol();
-						} else if (entry.getType() == 5) {
-							result += encodeVLQ(entry.getCol() - column);
-							result += encodeVLQ(entry.getSource() - source);
-							result += encodeVLQ(entry.getSrcLine() - in_line);
-							result += encodeVLQ(entry.getSrcCol() - in_col);
-							result += encodeVLQ(entry.getToken() - token);
-							column = entry.getCol();
-							source = entry.getSource();
-							in_line = entry.getSrcLine();
-							in_col = entry.getSrcCol();
-							token = entry.getToken();
+					LineMap* row = map.rows[i].get();
+					for(size_t n = 0; n < row->getEntryCount(); ++n) {
+						const ColMap* entry = row->getColMap(n).get();
+						if (entry->getType() == 1) {
+							result += encodeVLQ(entry->getCol() - column);
+							source = entry->getCol();
+						} else if (entry->getType() == 4) {
+							result += encodeVLQ(entry->getCol() - column);
+							result += encodeVLQ(entry->getSource() - source);
+							result += encodeVLQ(entry->getSrcLine() - in_line);
+							result += encodeVLQ(entry->getSrcCol() - in_col);
+							column = entry->getCol();
+							source = entry->getSource();
+							in_line = entry->getSrcLine();
+							in_col = entry->getSrcCol();
+						} else if (entry->getType() == 5) {
+							result += encodeVLQ(entry->getCol() - column);
+							result += encodeVLQ(entry->getSource() - source);
+							result += encodeVLQ(entry->getSrcLine() - in_line);
+							result += encodeVLQ(entry->getSrcCol() - in_col);
+							result += encodeVLQ(entry->getToken() - token);
+							column = entry->getCol();
+							source = entry->getSource();
+							in_line = entry->getSrcLine();
+							in_col = entry->getSrcCol();
+							token = entry->getToken();
 						}
-						if (n + 1 != row.getEntryCount()) result += ",";
+						if (n + 1 != row->getEntryCount()) result += ",";
 					}
 					if (i + 1 != map.getRowCount()) result += ";";
 
@@ -160,13 +157,13 @@ namespace SourceMap
 
 			}
 
-			void unserialize(Mapping& map, const string& data)
+			void unserialize(Mappings& map, const string& data)
 			{
 
 				string::const_iterator it = data.begin();
 				string::const_iterator end = data.end();
 
-				Row* row = &map.rows.back();
+				LineMapSP row = map.rows.back();
 
 				size_t column = 0;
 				size_t source = 0;
@@ -175,7 +172,6 @@ namespace SourceMap
 				size_t token = 0;
 
 				vector<int> offset;
-
 				while(true) {
 
 					// check if we reached a delimiter for entries
@@ -187,7 +183,7 @@ namespace SourceMap
 							offset.size() == 1 &&
 							int(offset[0] + column) >= 0
 						) {
-							row->addEntry(Entry(
+							row->addEntry(SourceMap::make_shared<ColMap>(
 								column += offset[0]
 							));
 						}
@@ -198,7 +194,7 @@ namespace SourceMap
 							int(offset[2] + in_line) >= 0 &&
 							int(offset[3] + in_col) >= 0
 						) {
-							row->addEntry(Entry(
+							row->addEntry(SourceMap::make_shared<ColMap>(
 								column += offset[0],
 								source += offset[1],
 								in_line += offset[2],
@@ -213,7 +209,7 @@ namespace SourceMap
 							int(offset[3] + in_col) >= 0 &&
 							int(offset[4] + token) >= 0
 						) {
-							row->addEntry(Entry(
+							row->addEntry(SourceMap::make_shared<ColMap>(
 								column += offset[0],
 								source += offset[1],
 								in_line += offset[2],
@@ -230,7 +226,7 @@ namespace SourceMap
 						// create a new row
 						if (*it == ';') {
 							map.addNewLine();
-							row = &map.rows.back();
+							row = map.rows.back();
 						column = 0; }
 
 						// clear for next
