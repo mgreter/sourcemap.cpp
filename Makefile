@@ -4,6 +4,13 @@ CXXFLAGS = -Wall -fopenmp -O2 -I src -I deps/cencode -I deps/json -I deps/UnitTe
 
 GIT_VERSION := $(shell git describe --abbrev=4 --dirty --always)
 
+# very simple checks for now
+ifeq ($(USE_STD_TR1_SHARED_PTR),)
+	ifeq ($(USE_STD_SHARED_PTR),)
+		CXXFLAGS += -DUSE_STD_TR1_SHARED_PTR
+	endif
+endif
+
 ifeq ($(OS),Windows_NT)
 	MV ?= move
 	CP ?= copy /Y

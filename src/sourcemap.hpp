@@ -1,11 +1,36 @@
 #ifndef SOURCEMAP_TYPEDEF
 #define SOURCEMAP_TYPEDEF
 
+#include <cstddef> // __GLIBCXX__, _HAS_TR1
+
+// GNU C++ or Intel C++ using libstd++.
+//
+#if defined (__GNUC__) && __GNUC__ >= 4 && \
+  defined (__GLIBCXX__)
+#  include <tr1/memory>
+//
+// IBM XL C++.
+//
+#elif defined (__xlC__) && __xlC__ >= 0x0900
+#  define __IBMCPP_TR1__
+#  include <memory>
+//
+// VC++ or Intel C++ using VC++ standard library.
+//
+#elif defined (_MSC_VER) && (_MSC_VER == 1500 && \
+  defined (_HAS_TR1) || _MSC_VER > 1500)
+#  include <memory>
+//
+// Boost fall-back.
+//
+#else
+#  include <boost/tr1/memory.hpp>
+#endif
+
 #include <iostream>
 #include <exception>
 #include <stdexcept>
 #include <vector>
-#include <memory>
 
 #ifdef __cplusplus
 
@@ -46,17 +71,19 @@ namespace SourceMap
 	using std::runtime_error;
 	using std::invalid_argument;
 
-	#ifdef HAS_PANDA
-		// using std::weak_ptr;
-		using panda::shared_ptr;
-		// implement `make_shared` for panda
+	#if defined(USE_STD_SHARED_PTR)
+		using std::shared_ptr;
+		using std::make_shared;
+	#elif defined(USE_STD_TR1_SHARED_PTR)
+		using std::tr1::shared_ptr;
 		template< class T, class... Args >
 		shared_ptr<T> make_shared( Args&&... args )
 		{ return shared_ptr<T>(new T(args...)); }
+	#elif defined(USE_BOOST_SHARED_PTR)
+		using boost::shared_ptr;
+		using boost::make_shared;
 	#else
-		// using std::weak_ptr;
-		using std::shared_ptr;
-		using std::make_shared;
+		#error No shared-pointer implementation selected!
 	#endif
 
 	#define foreach(type, variable, array) \
